@@ -2,31 +2,42 @@ use bevy::prelude::*;
 
 #[derive(Resource, Default, Debug)]
 pub struct ActiveEffects {
-    pub effects: Vec<(Vec<Keyframe>, Effect)>,
+    pub effects: Vec<(f32, f32, Vec<Keyframe>, Effect)>,
 }
 
 #[derive(Debug)]
 pub enum Effect {
-    Fill { color: Color, groups: Vec<u32> },
+    Fill {
+        color: Color,
+        groups: Vec<u32>
+    },
     Pulse {
         color: Color,
         groups: Vec<u32>,
         center: Vec3,
-        speed: f32,
+        radius: f32,
         flat: f32,
         head: f32,
         tail: f32,
     },
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Keyframe {
     pub time: f32,
-    pub value: f32,
     pub interpolation: InterpolationType,
+    pub key: String,
+    pub value: KeyframeValue,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
+pub enum KeyframeValue {
+    FloatKeyframe(f32),
+    ColorKeyframe(Color),
+    Vec3Keyframe(Vec3),
+}
+
+#[derive(Default, Debug, Clone, Copy)]
 pub enum InterpolationType {
     #[default]
     LINEAR,

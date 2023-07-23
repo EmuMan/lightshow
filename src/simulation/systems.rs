@@ -32,30 +32,32 @@ pub fn pulse_test_startup(
         }
     }
 
+    let keyframes = vec![
+        Keyframe {
+            time: 0.,
+            interpolation: InterpolationType::LINEAR,
+            key: "radius".to_string(),
+            value: KeyframeValue::FloatKeyframe(0.),
+        },
+        Keyframe {
+            time: 3.,
+            interpolation: InterpolationType::LINEAR,
+            key: "radius".to_string(),
+            value: KeyframeValue::FloatKeyframe(3.),
+        },
+    ];
+
     let effect = Effect::Pulse {
         color: Color::WHITE,
         groups: vec![0],
         center: Vec3::ZERO,
-        speed: 1.,
+        radius: 0.,
         flat: 1.,
         head: 1.,
         tail: 1.,
     };
 
-    let keyframes = vec![
-        Keyframe {
-            time: 0.,
-            value: 0.,
-            interpolation: InterpolationType::LINEAR,
-        },
-        Keyframe {
-            time: 3.,
-            value: 3.,
-            interpolation: InterpolationType::LINEAR,
-        },
-    ];
-
-    effects.effects.push((keyframes, effect));
+    effects.effects.push((0., 5., keyframes, effect));
 }
 
 pub fn increment_time(
@@ -99,30 +101,77 @@ pub fn update_light_positions(
 
 pub fn update_light_colors(
     mut materials: ResMut<Assets<ColorMaterial>>,
-    effects: Res<ActiveEffects>,
+    mut effects: ResMut<ActiveEffects>,
     time: Res<SimulationTime>,
     material_query: Query<(&Handle<ColorMaterial>, &Light)>,
 ) {
-    for (_, effect) in &effects.effects {
+
+    // reset all to zero
+    for (material, _) in &material_query {
+        let color = &mut materials.get_mut(material).unwrap().color;
+        color.set_r(0.);
+        color.set_g(0.);
+        color.set_b(0.);
+    }
+
+    //update for each effect
+    for (start_time, end_time, keyframes, effect) in effects.effects.iter_mut() {
+        if time.time < *start_time || time.time > *end_time {
+            continue;
+        }
+        // this line is the reason i chose to separate the light iterations as such.
+        // it's a little inconvenient to have the two loops, but it ensures that each
+        // effect is only updated once, which is the more costly operation.
+        update_effect(effect, keyframes, time.time);
         for (material, light) in &material_query {
             let color = &mut materials.get_mut(material).unwrap().color;
-            color.set_r(0.);
-            color.set_g(0.);
-            color.set_b(0.);
-            apply_effect(color, &light.location, time.time, effect, &light.groups);
+            apply_effect(color, &light.location, effect, &light.groups);
         }
     }
+}
+
+pub fn update_effect(
+    effect: &mut Effect,
+    keyframes: &Vec<Keyframe>,
+    time: f32,
+) {
+    match effect {
+        Effect::Fill {
+            color,
+            ..
+        } => {
+            *color = get_color_value(keyframes, "color", time, color);
+        }
+        Effect::Pulse {
+            color,
+            center,
+            radius,
+            flat,
+            head,
+            tail,
+            ..
+        } => {
+            *color = get_color_value(keyframes, "color", time, color);
+            *center = get_vec3_value(keyframes, "center", time, center);
+            *radius = get_float_value(keyframes, "radius", time, radius);
+            *flat = get_float_value(keyframes, "flat", time, flat);
+            *head = get_float_value(keyframes, "head", time, head);
+            *tail = get_float_value(keyframes, "tail", time, tail);
+        }
+    };
 }
 
 pub fn apply_effect(
     orig_color: &mut Color,
     location: &Vec3,
-    time: f32,
     effect: &Effect,
     light_groups: &Vec<u32>,
 ) {
     match effect {
-        Effect::Fill { color, groups } => {
+        Effect::Fill {
+            color,
+            groups
+        } => {
             if !groups.iter().any(|item| light_groups.contains(item)) {
                 return;
             }
@@ -135,7 +184,7 @@ pub fn apply_effect(
             color,
             groups,
             center,
-            speed,
+            radius,
             flat,
             head,
             tail
@@ -143,12 +192,12 @@ pub fn apply_effect(
             if !groups.iter().any(|item| light_groups.contains(item)) {
                 return;
             }
+            
             apply_shockwave(
-                time,
                 orig_color,
                 color,
                 *location - *center,
-                *speed,
+                *radius,
                 *flat,
                 *head,
                 *tail,
@@ -167,18 +216,15 @@ pub fn apply_fill(
 }
 
 pub fn apply_shockwave(
-    time: f32,
     orig_color: &mut Color,
     color: &Color,
     displacement: Vec3,
-    speed: f32,
+    radius: f32,
     flat: f32,
     head: f32,
     tail: f32
 ) {
     let distance = displacement.length();
-    let radius = time * speed;
-    // println!("{radius}, {distance}");
     let half_flat = flat / 2.;
     let mut influence: f32 = 0.;
 
@@ -193,4 +239,194 @@ pub fn apply_shockwave(
     orig_color.set_r(orig_color.r() + color.r() * influence);
     orig_color.set_g(orig_color.g() + color.g() * influence);
     orig_color.set_b(orig_color.b() + color.b() * influence);
+}
+
+fn interpolate_float(
+    start: f32,
+    end: f32,
+    time: f32,
+    interpolation: InterpolationType,
+) -> f32 {
+    match interpolation {
+        InterpolationType::CONSTANT => {
+            start
+        }
+        InterpolationType::LINEAR => {
+            start + (end - start) * time
+        }
+    }
+}
+
+fn interpolate_color(
+    start: Color,
+    end: Color,
+    time: f32,
+    interpolation: InterpolationType,
+) -> Color {
+    Color::rgba(
+        interpolate_float(start.r(), end.r(), time, interpolation),
+        interpolate_float(start.g(), end.g(), time, interpolation),
+        interpolate_float(start.b(), end.b(), time, interpolation),
+        interpolate_float(start.a(), end.a(), time, interpolation),
+    )
+}
+
+fn interpolate_vec3(
+    start: Vec3,
+    end: Vec3,
+    time: f32,
+    interpolation: InterpolationType,
+) -> Vec3 {
+    Vec3::new(
+        interpolate_float(start.x, end.x, time, interpolation),
+        interpolate_float(start.y, end.y, time, interpolation),
+        interpolate_float(start.z, end.z, time, interpolation),
+    )
+}
+
+fn get_surrounding_keyframes<'a>(
+    keyframes: &'a Vec<Keyframe>,
+    key: &str,
+    time: f32,
+) -> (Option<&'a Keyframe>, Option<&'a Keyframe>) {
+    let mut start_keyframe: Option<&Keyframe> = None {};
+    let mut end_keyframe: Option<&Keyframe> = None {};
+
+    for keyframe in keyframes.iter() {
+        if keyframe.key != *key {
+            continue;
+        }
+        if keyframe.time > time {
+            end_keyframe = Some(keyframe);
+            break;
+        }
+        if keyframe.time < time {
+            start_keyframe = Some(keyframe);
+        }
+    }
+
+    (start_keyframe, end_keyframe)
+}
+
+// TODO: Maybe clean this tragedy up
+fn get_float_value(
+    keyframes: &Vec<Keyframe>,
+    key: &str,
+    time: f32,
+    default: &f32,
+) -> f32 {
+    let (start_opt, end_opt) =
+        get_surrounding_keyframes(keyframes, key, time);
+    
+    if let Some(start_keyframe) = start_opt {
+        let KeyframeValue::FloatKeyframe(start_value) = start_keyframe.value else {
+            panic!("tried to interpolate float from non-float start keyframe with key {}", key.to_string());
+        };
+        if let Some(end_keyframe) = end_opt {
+            let KeyframeValue::FloatKeyframe(end_value) = end_keyframe.value else {
+                panic!("tried to interpolate float from non-float end keyframe with key {}", key.to_string());
+            };
+            // both start and end
+            return interpolate_float(
+                start_value,
+                end_value,
+                (time - start_keyframe.time) /
+                    (end_keyframe.time - start_keyframe.time),
+                end_keyframe.interpolation,
+            );
+        }
+        // start not end
+        return start_value;
+    }
+    if let Some(end_keyframe) = end_opt {
+        let KeyframeValue::FloatKeyframe(end_value) = end_keyframe.value else {
+            panic!("tried to interpolate float from non-float end keyframe with key {}", key.to_string());
+        };
+        // end not start
+        return end_value;
+    }
+    // neither
+    *default
+}
+
+// TODO: Maybe clean this tragedy up (also rethink copy pasted code idiot)
+fn get_color_value(
+    keyframes: &Vec<Keyframe>,
+    key: &str,
+    time: f32,
+    default: &Color,
+) -> Color {
+    let (start_opt, end_opt) =
+        get_surrounding_keyframes(keyframes, key, time);
+    
+    if let Some(start_keyframe) = start_opt {
+        let KeyframeValue::ColorKeyframe(start_value) = start_keyframe.value else {
+            panic!("tried to interpolate color from non-float start keyframe with key {}", key.to_string());
+        };
+        if let Some(end_keyframe) = end_opt {
+            let KeyframeValue::ColorKeyframe(end_value) = end_keyframe.value else {
+                panic!("tried to interpolate color from non-float end keyframe with key {}", key.to_string());
+            };
+            // both start and end
+            return interpolate_color(
+                start_value,
+                end_value,
+                (time - start_keyframe.time) /
+                    (end_keyframe.time - start_keyframe.time),
+                end_keyframe.interpolation,
+            );
+        }
+        // start not end
+        return start_value;
+    }
+    if let Some(end_keyframe) = end_opt {
+        let KeyframeValue::ColorKeyframe(end_value) = end_keyframe.value else {
+            panic!("tried to interpolate color from non-float end keyframe with key {}", key.to_string());
+        };
+        // end not start
+        return end_value;
+    }
+    // neither
+    *default
+}
+
+// TODO: Maybe clean this tragedy up (also rethink copy pasted code idiot)
+fn get_vec3_value(
+    keyframes: &Vec<Keyframe>,
+    key: &str,
+    time: f32,
+    default: &Vec3,
+) -> Vec3 {
+    let (start_opt, end_opt) =
+        get_surrounding_keyframes(keyframes, key, time);
+    
+    if let Some(start_keyframe) = start_opt {
+        let KeyframeValue::Vec3Keyframe(start_value) = start_keyframe.value else {
+            panic!("tried to interpolate vec3 from non-float start keyframe with key {}", key.to_string());
+        };
+        if let Some(end_keyframe) = end_opt {
+            let KeyframeValue::Vec3Keyframe(end_value) = end_keyframe.value else {
+                panic!("tried to interpolate vec3 from non-float end keyframe with key {}", key.to_string());
+            };
+            // both start and end
+            return interpolate_vec3(
+                start_value,
+                end_value,
+                (time - start_keyframe.time) /
+                    (end_keyframe.time - start_keyframe.time),
+                end_keyframe.interpolation,
+            );
+        }
+        // start not end
+        return start_value;
+    }
+    if let Some(end_keyframe) = end_opt {
+        let KeyframeValue::Vec3Keyframe(end_value) = end_keyframe.value else {
+            panic!("tried to interpolate vec3 from non-float end keyframe with key {}", key.to_string());
+        };
+        // end not start
+        return end_value;
+    }
+    // neither
+    *default
 }
