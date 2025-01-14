@@ -1,16 +1,16 @@
 pub mod simulation;
-pub mod systems;
+pub mod camera;
 
 use bevy::prelude::*;
 
 use simulation::*;
-use systems::*;
+use camera::*;
 
 fn main() {
     App::new()
-        .insert_resource(ClearColor(Color::BLACK))
+        .insert_resource(ClearColor(Color::srgb(0.0, 0.0, 127.0)))
         .add_plugins(DefaultPlugins)
         .add_plugins(SimulationPlugin)
-        .add_systems(Startup, spawn_camera)
+        .add_plugins(CameraPlugin)
         .run();
 }

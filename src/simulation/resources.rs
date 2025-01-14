@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 #[derive(Resource, Default, Debug)]
 pub struct ActiveEffects {
-    pub effects: Vec<(f32, f32, Vec<Keyframe>, Effect)>,
+    pub effects: Vec<(f64, f64, Vec<Keyframe>, Effect)>,
 }
 
 #[derive(Debug)]
@@ -24,7 +24,7 @@ pub enum Effect {
 
 #[derive(Debug)]
 pub struct Keyframe {
-    pub time: f32,
+    pub time: f64,
     pub interpolation: InterpolationType,
     pub key: String,
     pub value: KeyframeValue,
@@ -45,12 +45,6 @@ pub enum InterpolationType {
 }
 
 #[derive(Resource, Default, Debug)]
-pub struct View {
-    pub location: Vec3,
-    pub zoom: f32,
-}
-
-#[derive(Resource, Default, Debug)]
 pub struct SimulationTime {
-    pub time: f32,
+    pub time: f64,
 }
