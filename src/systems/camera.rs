@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use super::resources::OriginalCameraTransform;
+use crate::resources::camera::*;
 
 pub fn spawn_camera(
     mut commands: Commands,
