@@ -1,20 +1,20 @@
 use bevy::prelude::*;
 use crate::components::{effects::ShockwaveEffect, keyframes::Keyframes};
 use crate::util::keyframes::*;
-use crate::resources::simulation::SimulationTime;
+use crate::resources::simulation::PlaybackInformation;
 use crate::components::fixtures::*;
 
 pub fn update_shockwave_effect(
-    simulation_time: Res<SimulationTime>,
+    playback: Res<PlaybackInformation>,
     mut query: Query<(&mut ShockwaveEffect, &Keyframes)>,
 ) {
     for (mut effect, keyframes) in &mut query {
-        effect.color = get_color_value(&keyframes.keyframes, "color", simulation_time.time, &effect.color);
-        effect.center = get_vec3_value(&keyframes.keyframes, "center", simulation_time.time, &effect.center);
-        effect.radius = get_float_value(&keyframes.keyframes, "radius", simulation_time.time, &effect.radius);
-        effect.flat = get_float_value(&keyframes.keyframes, "flat", simulation_time.time, &effect.flat);
-        effect.head = get_float_value(&keyframes.keyframes, "head", simulation_time.time, &effect.head);
-        effect.tail = get_float_value(&keyframes.keyframes, "tail", simulation_time.time, &effect.tail);
+        effect.color = get_color_value(&keyframes.keyframes, "color", playback.current_time, &effect.color);
+        effect.center = get_vec3_value(&keyframes.keyframes, "center", playback.current_time, &effect.center);
+        effect.radius = get_float_value(&keyframes.keyframes, "radius", playback.current_time, &effect.radius);
+        effect.flat = get_float_value(&keyframes.keyframes, "flat", playback.current_time, &effect.flat);
+        effect.head = get_float_value(&keyframes.keyframes, "head", playback.current_time, &effect.head);
+        effect.tail = get_float_value(&keyframes.keyframes, "tail", playback.current_time, &effect.tail);
     }
 }
 
