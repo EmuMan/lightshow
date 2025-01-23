@@ -1,6 +1,9 @@
 use bevy::prelude::*;
 
 use crate::components::fixtures::*;
+use crate::components::network::*;
+use crate::resources::network::ArtNetConnection;
+use crate::resources::network::ArtNetConnections;
 
 pub fn spawn_color_light(
     commands: &mut Commands,
@@ -9,6 +12,7 @@ pub fn spawn_color_light(
     transform: Transform,
     radius: f32,
     groups: Vec<u32>,
+    artnet: Option<ArtNetNode>,
 ) {
     commands.spawn(
         (
@@ -22,6 +26,7 @@ pub fn spawn_color_light(
             Fixture {
                 groups,
             },
+            artnet.unwrap_or_default(),
         )
     );
 }
@@ -56,4 +61,32 @@ fn apply_color(
         orig_srgba.blue + new_srgba.blue,
         orig_srgba.alpha + new_srgba.alpha,
     ).into()
+}
+
+pub fn add_data_to_buffer(
+    materials: Res<Assets<ColorMaterial>>,
+    mut connections: ResMut<ArtNetConnections>,
+    query: Query<(&ArtNetNode, &MeshMaterial2d<ColorMaterial>)>,
+) {
+    for (node, material) in &mut query.iter() {
+        if !connections.connection_exists(&node.ip, node.port, node.universe) {
+            let connection = ArtNetConnection::new(&node.ip, node.port, node.universe);
+            if let Some(connection) = connection {
+                connections.add_connection(connection);
+            } else {
+                continue;
+            }
+        }
+
+        let connection = connections.get_connection_mut(&node.ip, node.port, node.universe);
+        let material = materials.get(material).unwrap();
+        let color = material.color;
+        let srgba = color.to_srgba();
+
+        if let Some(connection) = connection {
+            connection.data_buffer.set_channel(node.channels[0], (srgba.red * 255.0) as u8);
+            connection.data_buffer.set_channel(node.channels[1], (srgba.green * 255.0) as u8);
+            connection.data_buffer.set_channel(node.channels[2], (srgba.blue * 255.0) as u8);
+        }
+    }
 }
