@@ -4,9 +4,9 @@ use bevy::prelude::*;
 pub struct PlaybackInformation {
     pub current_time: f64,
     pub is_playing: bool,
-    pub length: f64,
     pub bpm: f64,
     pub beats_per_bar: usize,
+    pub current_layer: Option<Entity>,
 }
 
 impl Default for PlaybackInformation {
@@ -14,9 +14,9 @@ impl Default for PlaybackInformation {
         Self {
             current_time: 0.0,
             is_playing: false,
-            length: 5.0,
             bpm: 120.0,
             beats_per_bar: 4,
+            current_layer: None,
         }
     }
 }

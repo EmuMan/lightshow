@@ -5,13 +5,16 @@ use color_light::spawn_color_light;
 
 use crate::components::effects::{Effect, ShockwaveEffect};
 use crate::components::network::ArtNetNode;
-use crate::resources::network::ActiveSocket;
-use crate::systems::fixtures::*;
+use crate::components::layers::Layer;
 use crate::components::keyframes::*;
+use crate::resources::network::ActiveSocket;
+use crate::resources::simulation::PlaybackInformation;
+use crate::systems::fixtures::*;
 
 pub fn pulse_test_startup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut playback: ResMut<PlaybackInformation>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut active_socket: ResMut<ActiveSocket>,
 ) {
@@ -49,6 +52,11 @@ pub fn pulse_test_startup(
         );
     }
 
+    let mut layer = Layer {
+        length: 4.,
+        effects: vec![],
+    };
+
     let keyframes = vec![
         Keyframe {
             time: 0.,
@@ -73,7 +81,7 @@ pub fn pulse_test_startup(
         tail: 30.,
     };
     
-    commands.spawn((
+    let effect_id = commands.spawn((
         Effect {
             groups: vec![0],
             start: 0.,
@@ -81,5 +89,11 @@ pub fn pulse_test_startup(
         },
         effect,
         Keyframes { keyframes },
-    ));
+    )).id();
+
+    layer.effects.push(effect_id);
+
+    let layer_id = commands.spawn((layer,)).id();
+
+    playback.current_layer = Some(layer_id);
 }
