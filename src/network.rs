@@ -1,6 +1,15 @@
+use bevy::prelude::*;
 use std::net::{SocketAddr, ToSocketAddrs};
 
-use bevy::prelude::*;
+pub struct NetworkPlugin;
+
+impl Plugin for NetworkPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<ArtNetConnections>()
+            .init_resource::<ActiveSocket>()
+            .add_systems(FixedUpdate, send_and_erase_buffers);
+    }
+}
 
 #[derive(Resource, Debug, Default)]
 pub struct ActiveSocket {
@@ -24,7 +33,7 @@ impl ArtNetConnections {
     pub fn add_connection(&mut self, connection: ArtNetConnection) {
         self.connections.push(connection);
     }
-    
+
     pub fn get_connection(&self, ip: &str, port: u16, universe: u16) -> Option<&ArtNetConnection> {
         self.connections.iter().find(|connection| {
             let cur_universe: u16 = connection.universe.into();
@@ -32,7 +41,12 @@ impl ArtNetConnections {
         })
     }
 
-    pub fn get_connection_mut(&mut self, ip: &str, port: u16, universe: u16) -> Option<&mut ArtNetConnection> {
+    pub fn get_connection_mut(
+        &mut self,
+        ip: &str,
+        port: u16,
+        universe: u16,
+    ) -> Option<&mut ArtNetConnection> {
         self.connections.iter_mut().find(|connection| {
             let cur_universe: u16 = connection.universe.into();
             connection.ip == ip && connection.port == port && cur_universe == universe
@@ -43,7 +57,6 @@ impl ArtNetConnections {
         self.get_connection(ip, port, universe).is_some()
     }
 }
-
 
 #[derive(Debug)]
 pub struct ArtNetConnection {
@@ -84,7 +97,6 @@ impl ArtNetConnection {
     }
 }
 
-
 #[derive(Debug)]
 pub struct Dmx512Buffer {
     bytes: Vec<u8>,
@@ -115,4 +127,40 @@ impl Dmx512Buffer {
             }
         }
     }
+}
+
+#[derive(Component)]
+pub struct ArtNetNode {
+    pub ip: String,
+    pub port: u16,
+    pub universe: u16,
+    pub channels: Vec<u16>,
+}
+
+impl Default for ArtNetNode {
+    fn default() -> Self {
+        ArtNetNode {
+            ip: "0.0.0.0".into(),
+            port: 6454,
+            universe: 0,
+            channels: vec![0; 512],
+        }
+    }
+}
+
+pub fn send_and_erase_buffers(
+    mut connections: ResMut<ArtNetConnections>,
+    socket: Res<ActiveSocket>,
+) {
+    let Some(socket) = &socket.socket else {
+        return;
+    };
+
+    for connection in &connections.connections {
+        let command = artnet_protocol::ArtCommand::Output(connection.into());
+        let bytes = command.write_to_buffer().unwrap();
+        socket.send_to(&bytes, connection.socket_addr).unwrap();
+    }
+
+    connections.connections = Vec::new();
 }

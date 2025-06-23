@@ -2,9 +2,19 @@ use bevy::prelude::*;
 
 use bevy_egui::{egui, EguiContexts};
 
-use crate::{components::{keyframes::Keyframes, layers::Layer}, resources::simulation::*};
+use crate::{keyframes::*, layers::*, simulation::*};
 
 pub mod timeline;
+
+use bevy_egui::EguiContextPass;
+
+pub struct UiPlugin;
+
+impl Plugin for UiPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(EguiContextPass, ui_playback_system);
+    }
+}
 
 pub fn ui_playback_system(
     mut playback: ResMut<PlaybackInformation>,
@@ -12,7 +22,8 @@ pub fn ui_playback_system(
     keyframes_query: Query<&Keyframes>,
     layers_query: Query<&Layer>,
 ) {
-    let active_layer = playback.current_layer
+    let active_layer = playback
+        .current_layer
         .and_then(|layer| layers_query.get(layer).ok());
     egui::Window::new("Playback").show(contexts.ctx_mut(), |ui| {
         if playback.is_playing {
@@ -26,11 +37,14 @@ pub fn ui_playback_system(
         }
 
         let mut keyframe_times: Vec<f64> = Vec::new();
-        let active_keyframes: Option<Vec<&Keyframes>> = active_layer
-            .map(|layer| layer.effects.iter().filter_map(|entity| {
-                keyframes_query.get(*entity).ok()
-            }).collect());
-        
+        let active_keyframes: Option<Vec<&Keyframes>> = active_layer.map(|layer| {
+            layer
+                .effects
+                .iter()
+                .filter_map(|entity| keyframes_query.get(*entity).ok())
+                .collect()
+        });
+
         if let Some(active_keyframes) = active_keyframes {
             for keyframes in &active_keyframes {
                 for keyframe in &keyframes.keyframes {

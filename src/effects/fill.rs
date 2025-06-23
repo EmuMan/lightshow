@@ -1,15 +1,17 @@
+use crate::{effects::FillEffect, fixtures::*, keyframes::*, simulation::PlaybackInformation};
 use bevy::prelude::*;
-use crate::components::{effects::FillEffect, keyframes::Keyframes};
-use crate::util::keyframes::*;
-use crate::resources::simulation::PlaybackInformation;
-use crate::components::fixtures::*;
 
 pub fn update_fill_effect(
     playback: Res<PlaybackInformation>,
     mut query: Query<(&mut FillEffect, &Keyframes)>,
 ) {
     for (mut effect, keyframes) in &mut query {
-        effect.color = get_color_value(&keyframes.keyframes, "color", playback.current_time, &effect.color);
+        effect.color = get_color_value(
+            &keyframes.keyframes,
+            "color",
+            playback.current_time,
+            &effect.color,
+        );
     }
 }
 

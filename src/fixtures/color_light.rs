@@ -1,9 +1,7 @@
 use bevy::prelude::*;
 
-use crate::components::fixtures::*;
-use crate::components::network::*;
-use crate::resources::network::ArtNetConnection;
-use crate::resources::network::ArtNetConnections;
+use crate::fixtures::*;
+use crate::network::*;
 
 pub fn spawn_color_light(
     commands: &mut Commands,
@@ -14,29 +12,22 @@ pub fn spawn_color_light(
     groups: Vec<u32>,
     artnet: Option<ArtNetNode>,
 ) {
-    commands.spawn(
-        (
-            Mesh2d(meshes.add(Circle::new(radius))),
-            MeshMaterial2d(materials.add(Color::BLACK)),
-            transform,
-            ColorLight {
-                radius,
-                color_queue: Vec::new(),
-            },
-            Fixture {
-                groups,
-            },
-            artnet.unwrap_or_default(),
-        )
-    );
+    commands.spawn((
+        Mesh2d(meshes.add(Circle::new(radius))),
+        MeshMaterial2d(materials.add(Color::BLACK)),
+        transform,
+        ColorLight {
+            radius,
+            color_queue: Vec::new(),
+        },
+        Fixture { groups },
+        artnet.unwrap_or_default(),
+    ));
 }
 
 pub fn apply_color_light_color_queues(
     mut materials: ResMut<Assets<ColorMaterial>>,
-    mut lights_query: Query<(
-        &MeshMaterial2d<ColorMaterial>,
-        &mut ColorLight,
-    )>,
+    mut lights_query: Query<(&MeshMaterial2d<ColorMaterial>, &mut ColorLight)>,
 ) {
     for (material, mut light) in &mut lights_query {
         let mut new_color = Color::BLACK;
@@ -49,10 +40,7 @@ pub fn apply_color_light_color_queues(
     }
 }
 
-fn apply_color(
-    orig_color: &Color,
-    new_color: &Color,
-) -> Color {
+fn apply_color(orig_color: &Color, new_color: &Color) -> Color {
     let orig_srgba = orig_color.to_srgba();
     let new_srgba = new_color.to_srgba();
     LinearRgba::new(
@@ -60,7 +48,8 @@ fn apply_color(
         orig_srgba.green + new_srgba.green,
         orig_srgba.blue + new_srgba.blue,
         orig_srgba.alpha + new_srgba.alpha,
-    ).into()
+    )
+    .into()
 }
 
 pub fn add_data_to_buffer(
@@ -84,9 +73,15 @@ pub fn add_data_to_buffer(
         let srgba = color.to_srgba();
 
         if let Some(connection) = connection {
-            connection.data_buffer.set_channel(node.channels[0], (srgba.red * 255.0) as u8);
-            connection.data_buffer.set_channel(node.channels[1], (srgba.green * 255.0) as u8);
-            connection.data_buffer.set_channel(node.channels[2], (srgba.blue * 255.0) as u8);
+            connection
+                .data_buffer
+                .set_channel(node.channels[0], (srgba.red * 255.0) as u8);
+            connection
+                .data_buffer
+                .set_channel(node.channels[1], (srgba.green * 255.0) as u8);
+            connection
+                .data_buffer
+                .set_channel(node.channels[2], (srgba.blue * 255.0) as u8);
         }
     }
 }

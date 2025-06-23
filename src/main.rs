@@ -2,12 +2,12 @@ use bevy::prelude::*;
 
 use bevy_egui::EguiPlugin;
 
-use lightshow::plugins::simulation::SimulationPlugin;
-use lightshow::plugins::camera::CameraPlugin;
-use lightshow::plugins::fixtures::FixturesPlugin;
-use lightshow::plugins::effects::EffectsPlugin;
-use lightshow::plugins::ui::UiPlugin;
-use lightshow::plugins::network::NetworkPlugin;
+use lightshow::camera::CameraPlugin;
+use lightshow::effects::EffectsPlugin;
+use lightshow::fixtures::FixturesPlugin;
+use lightshow::network::NetworkPlugin;
+use lightshow::simulation::SimulationPlugin;
+use lightshow::ui::UiPlugin;
 
 fn main() {
     App::new()
@@ -18,7 +18,9 @@ fn main() {
         .add_plugins(CameraPlugin)
         .add_plugins(FixturesPlugin)
         .add_plugins(EffectsPlugin)
-        .add_plugins(EguiPlugin)
+        .add_plugins(EguiPlugin {
+            enable_multipass_for_primary_context: true,
+        })
         .add_plugins(UiPlugin)
         .add_plugins(NetworkPlugin)
         .run();

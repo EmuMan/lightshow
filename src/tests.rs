@@ -1,15 +1,8 @@
 use std::net::UdpSocket;
 
 use bevy::prelude::*;
-use color_light::spawn_color_light;
 
-use crate::components::effects::{Effect, ShockwaveEffect};
-use crate::components::network::ArtNetNode;
-use crate::components::layers::Layer;
-use crate::components::keyframes::*;
-use crate::resources::network::ActiveSocket;
-use crate::resources::simulation::PlaybackInformation;
-use crate::systems::fixtures::*;
+use crate::{effects::*, fixtures::*, keyframes::*, layers::*, network::*, simulation::*};
 
 pub fn pulse_test_startup(
     mut commands: Commands,
@@ -21,7 +14,7 @@ pub fn pulse_test_startup(
     active_socket.socket = Some(UdpSocket::bind(("0.0.0.0", 6454)).unwrap());
 
     for i in 0..150 {
-        spawn_color_light(
+        color_light::spawn_color_light(
             &mut commands,
             &mut meshes,
             &mut materials,
@@ -37,7 +30,7 @@ pub fn pulse_test_startup(
     }
 
     for i in 0..150 {
-        spawn_color_light(
+        color_light::spawn_color_light(
             &mut commands,
             &mut meshes,
             &mut materials,
@@ -80,16 +73,18 @@ pub fn pulse_test_startup(
         head: 30.,
         tail: 30.,
     };
-    
-    let effect_id = commands.spawn((
-        Effect {
-            groups: vec![0],
-            start: 0.,
-            end: 3.,
-        },
-        effect,
-        Keyframes { keyframes },
-    )).id();
+
+    let effect_id = commands
+        .spawn((
+            Effect {
+                groups: vec![0],
+                start: 0.,
+                end: 3.,
+            },
+            effect,
+            Keyframes { keyframes },
+        ))
+        .id();
 
     layer.effects.push(effect_id);
 

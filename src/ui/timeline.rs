@@ -1,9 +1,6 @@
-use bevy_egui::egui::{
-    self, Color32, Sense, Stroke, Ui, Vec2,
-};
+use bevy_egui::egui::{self, Color32, Sense, Stroke, Ui, Vec2};
 
-use crate::resources::simulation::PlaybackInformation;
-use crate::components::layers::Layer;
+use crate::{layers::*, simulation::*};
 
 pub fn draw_timeline(
     ui: &mut Ui,
@@ -13,7 +10,7 @@ pub fn draw_timeline(
 ) -> egui::Response {
     let (response, painter) = ui.allocate_painter(
         Vec2::new(ui.available_width(), 50.0),
-        Sense::click_and_drag()
+        Sense::click_and_drag(),
     );
 
     // background
@@ -32,10 +29,11 @@ pub fn draw_timeline(
         }
     }
 
-    let playhead_pos = response.rect.min + Vec2::new(
-        (playback.current_time / active_layer.length) as f32 * response.rect.width(),
-        0.0,
-    );
+    let playhead_pos = response.rect.min
+        + Vec2::new(
+            (playback.current_time / active_layer.length) as f32 * response.rect.width(),
+            0.0,
+        );
 
     // bar lines
     let num_bars = (active_layer.length * playback.bpm / 60.0).ceil() as usize;
@@ -64,14 +62,20 @@ pub fn draw_timeline(
         let x = pos as f32 / active_layer.length as f32 * response.rect.width();
         let keyframe_pos = response.rect.min + Vec2::new(x, 0.0);
         painter.line_segment(
-            [keyframe_pos, keyframe_pos + Vec2::Y * response.rect.height()],
+            [
+                keyframe_pos,
+                keyframe_pos + Vec2::Y * response.rect.height(),
+            ],
             Stroke::new(2.0, Color32::from_rgb(127, 127, 0)),
         );
     }
 
     // playhead
     painter.line_segment(
-        [playhead_pos, playhead_pos + Vec2::Y * response.rect.height()],
+        [
+            playhead_pos,
+            playhead_pos + Vec2::Y * response.rect.height(),
+        ],
         Stroke::new(1.0, Color32::WHITE),
     );
 

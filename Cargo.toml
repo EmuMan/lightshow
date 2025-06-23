@@ -1,14 +1,14 @@
 [package]
 name = "lightshow"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 artnet_protocol = "0.4.3"
-bevy = { version = "0.15.1", features = ["dynamic_linking"] }
-bevy_egui = "0.32.0"
+bevy = { version = "0.16", features = ["dynamic_linking"] }
+bevy_egui = "0.34.1"
 
 # Enable a small amount of optimization in debug mode
 [profile.dev]
