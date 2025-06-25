@@ -1,52 +1,59 @@
-use crate::{effects::*, fixtures::*, keyframes::*, simulation::*};
+use crate::{effects::*, fixtures::*, keyframes::*};
 
-pub fn update_shockwave_effect(
-    playback: Res<PlaybackInformation>,
-    mut query: Query<(&mut ShockwaveEffect, &Keyframes)>,
-) {
-    for (mut effect, keyframes) in &mut query {
-        effect.color = get_color_value(
+#[derive(Component, Debug, Clone)]
+pub struct ColorShockwaveEffect {
+    pub color: Color,
+    pub center: Vec3,
+    pub radius: f32,
+    pub flat: f32,
+    pub head: f32,
+    pub tail: f32,
+}
+
+pub fn update_shockwave_effect(mut query: Query<(&Effect, &mut ColorShockwaveEffect, &Keyframes)>) {
+    for (effect, mut shockwave_effect, keyframes) in &mut query {
+        shockwave_effect.color = get_color_value(
             &keyframes.keyframes,
             "color",
-            playback.current_time,
-            &effect.color,
+            effect.current_time,
+            &shockwave_effect.color,
         );
-        effect.center = get_vec3_value(
+        shockwave_effect.center = get_vec3_value(
             &keyframes.keyframes,
             "center",
-            playback.current_time,
-            &effect.center,
+            effect.current_time,
+            &shockwave_effect.center,
         );
-        effect.radius = get_float_value(
+        shockwave_effect.radius = get_float_value(
             &keyframes.keyframes,
             "radius",
-            playback.current_time,
-            &effect.radius,
+            effect.current_time,
+            &shockwave_effect.radius,
         );
-        effect.flat = get_float_value(
+        shockwave_effect.flat = get_float_value(
             &keyframes.keyframes,
             "flat",
-            playback.current_time,
-            &effect.flat,
+            effect.current_time,
+            &shockwave_effect.flat,
         );
-        effect.head = get_float_value(
+        shockwave_effect.head = get_float_value(
             &keyframes.keyframes,
             "head",
-            playback.current_time,
-            &effect.head,
+            effect.current_time,
+            &shockwave_effect.head,
         );
-        effect.tail = get_float_value(
+        shockwave_effect.tail = get_float_value(
             &keyframes.keyframes,
             "tail",
-            playback.current_time,
-            &effect.tail,
+            effect.current_time,
+            &shockwave_effect.tail,
         );
     }
 }
 
 pub fn apply_shockwave_effect(
     mut color_lights_query: Query<(&mut ColorLight, &Transform)>,
-    shockwave_query: Query<&ShockwaveEffect>,
+    shockwave_query: Query<&ColorShockwaveEffect>,
 ) {
     for shockwave_effect in &shockwave_query {
         for (mut color_light, transform) in &mut color_lights_query {

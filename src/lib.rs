@@ -4,6 +4,7 @@ pub mod fixtures;
 pub mod keyframes;
 pub mod layers;
 pub mod network;
+pub mod simple_store;
 pub mod simulation;
 pub mod tests;
 pub mod ui;

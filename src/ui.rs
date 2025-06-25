@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use bevy_egui::{egui, EguiContexts};
 
-use crate::{keyframes::*, layers::*, simulation::*};
+use crate::{layers::*, simple_store::SimpleStore, simulation::*};
 
 pub mod timeline;
 
@@ -18,13 +18,10 @@ impl Plugin for UiPlugin {
 
 pub fn ui_playback_system(
     mut playback: ResMut<PlaybackInformation>,
+    primary_layer: Res<PrimaryLayer>,
+    layer_store: Res<SimpleStore<Layer>>,
     mut contexts: EguiContexts,
-    keyframes_query: Query<&Keyframes>,
-    layers_query: Query<&Layer>,
 ) {
-    let active_layer = playback
-        .current_layer
-        .and_then(|layer| layers_query.get(layer).ok());
     egui::Window::new("Playback").show(contexts.ctx_mut(), |ui| {
         if playback.is_playing {
             if ui.button("Pause").clicked() {
@@ -36,25 +33,11 @@ pub fn ui_playback_system(
             }
         }
 
-        let mut keyframe_times: Vec<f64> = Vec::new();
-        let active_keyframes: Option<Vec<&Keyframes>> = active_layer.map(|layer| {
-            layer
-                .effects
-                .iter()
-                .filter_map(|entity| keyframes_query.get(*entity).ok())
-                .collect()
-        });
+        let keyframe_times: Vec<f64> = Vec::new();
+        // TODO: Add keyframe times back?
 
-        if let Some(active_keyframes) = active_keyframes {
-            for keyframes in &active_keyframes {
-                for keyframe in &keyframes.keyframes {
-                    if !keyframe_times.contains(&keyframe.time) {
-                        keyframe_times.push(keyframe.time);
-                    }
-                }
-            }
-        }
+        let primary_layer = primary_layer.0.and_then(|handle| layer_store.get(handle));
 
-        timeline::draw_timeline(ui, &mut playback, keyframe_times, active_layer);
+        timeline::draw_timeline(ui, &mut playback, keyframe_times, primary_layer);
     });
 }

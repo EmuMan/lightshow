@@ -159,7 +159,8 @@ pub fn send_and_erase_buffers(
     for connection in &connections.connections {
         let command = artnet_protocol::ArtCommand::Output(connection.into());
         let bytes = command.write_to_buffer().unwrap();
-        socket.send_to(&bytes, connection.socket_addr).unwrap();
+        // TODO: re-add this back once it doesn't cause lag spikes...
+        // socket.send_to(&bytes, connection.socket_addr).unwrap();
     }
 
     connections.connections = Vec::new();

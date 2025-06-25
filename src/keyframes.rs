@@ -1,11 +1,11 @@
 use bevy::prelude::*;
 
-#[derive(Component)]
+#[derive(Component, Debug)]
 pub struct Keyframes {
     pub keyframes: Vec<Keyframe>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Keyframe {
     pub time: f64,
     pub interpolation: InterpolationType,
@@ -13,7 +13,7 @@ pub struct Keyframe {
     pub value: KeyframeValue,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum KeyframeValue {
     FloatKeyframe(f32),
     ColorKeyframe(Color),

@@ -1,23 +1,24 @@
-use crate::{effects::FillEffect, fixtures::*, keyframes::*, simulation::PlaybackInformation};
-use bevy::prelude::*;
+use crate::{effects::*, fixtures::*, keyframes::*};
 
-pub fn update_fill_effect(
-    playback: Res<PlaybackInformation>,
-    mut query: Query<(&mut FillEffect, &Keyframes)>,
-) {
-    for (mut effect, keyframes) in &mut query {
-        effect.color = get_color_value(
+#[derive(Component, Debug, Clone)]
+pub struct ColorFillEffect {
+    pub color: Color,
+}
+
+pub fn update_fill_effect(mut query: Query<(&Effect, &mut ColorFillEffect, &Keyframes)>) {
+    for (effect, mut fill_effect, keyframes) in &mut query {
+        fill_effect.color = get_color_value(
             &keyframes.keyframes,
             "color",
-            playback.current_time,
-            &effect.color,
+            effect.current_time,
+            &fill_effect.color,
         );
     }
 }
 
 pub fn apply_fill_effect(
     mut color_lights_query: Query<&mut ColorLight>,
-    fill_query: Query<&FillEffect>,
+    fill_query: Query<&ColorFillEffect>,
 ) {
     for fill_effect in &fill_query {
         for mut color_light in &mut color_lights_query {

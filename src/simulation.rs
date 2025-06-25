@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{layers::*, tests::*};
+use crate::{layers::*, simple_store::SimpleStore, tests::*};
 
 pub struct SimulationPlugin;
 
@@ -18,7 +18,6 @@ pub struct PlaybackInformation {
     pub is_playing: bool,
     pub bpm: f64,
     pub beats_per_bar: usize,
-    pub current_layer: Option<Entity>,
 }
 
 impl Default for PlaybackInformation {
@@ -28,7 +27,6 @@ impl Default for PlaybackInformation {
             is_playing: false,
             bpm: 120.0,
             beats_per_bar: 4,
-            current_layer: None,
         }
     }
 }
@@ -36,12 +34,10 @@ impl Default for PlaybackInformation {
 pub fn increment_playback_time(
     time: Res<Time>,
     mut playback: ResMut<PlaybackInformation>,
-    layers_query: Query<&Layer>,
+    primary_layer: Res<PrimaryLayer>,
+    layer_store: Res<SimpleStore<Layer>>,
 ) {
-    let Some(layer) = playback
-        .current_layer
-        .and_then(|layer| layers_query.get(layer).ok())
-    else {
+    let Some(layer) = primary_layer.0.and_then(|handle| layer_store.get(handle)) else {
         playback.current_time = 0.0;
         playback.is_playing = false;
         return;
