@@ -26,7 +26,6 @@ impl Plugin for EffectsPlugin {
 #[derive(Component, Debug, Clone)]
 pub struct Effect {
     pub groups: Vec<u32>,
-    pub current_time: f64,
     pub init_info: EffectInfo,
 }
 

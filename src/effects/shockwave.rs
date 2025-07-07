@@ -1,4 +1,4 @@
-use crate::{effects::*, fixtures::*, keyframes::*};
+use crate::{effects::*, fixtures::*, keyframes::*, timeline::CurrentTime};
 
 #[derive(Component, Debug, Clone)]
 pub struct ColorShockwaveEffect {
@@ -10,42 +10,44 @@ pub struct ColorShockwaveEffect {
     pub tail: f32,
 }
 
-pub fn update_shockwave_effect(mut query: Query<(&Effect, &mut ColorShockwaveEffect, &Keyframes)>) {
-    for (effect, mut shockwave_effect, keyframes) in &mut query {
+pub fn update_shockwave_effect(
+    mut query: Query<(&CurrentTime, &mut ColorShockwaveEffect, &Keyframes), With<Effect>>,
+) {
+    for (current_time, mut shockwave_effect, keyframes) in &mut query {
         shockwave_effect.color = get_color_value(
             &keyframes.keyframes,
             "color",
-            effect.current_time,
+            current_time.time,
             &shockwave_effect.color,
         );
         shockwave_effect.center = get_vec3_value(
             &keyframes.keyframes,
             "center",
-            effect.current_time,
+            current_time.time,
             &shockwave_effect.center,
         );
         shockwave_effect.radius = get_float_value(
             &keyframes.keyframes,
             "radius",
-            effect.current_time,
+            current_time.time,
             &shockwave_effect.radius,
         );
         shockwave_effect.flat = get_float_value(
             &keyframes.keyframes,
             "flat",
-            effect.current_time,
+            current_time.time,
             &shockwave_effect.flat,
         );
         shockwave_effect.head = get_float_value(
             &keyframes.keyframes,
             "head",
-            effect.current_time,
+            current_time.time,
             &shockwave_effect.head,
         );
         shockwave_effect.tail = get_float_value(
             &keyframes.keyframes,
             "tail",
-            effect.current_time,
+            current_time.time,
             &shockwave_effect.tail,
         );
     }

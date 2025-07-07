@@ -86,7 +86,6 @@ pub fn pulse_test_startup(
 
     let effect_handle = effect_store.add(Effect {
         groups: vec![0],
-        current_time: 0.0,
         init_info: EffectInfo::ColorShockwave(effect_info),
     });
 

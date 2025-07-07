@@ -7,4 +7,5 @@ pub mod network;
 pub mod simple_store;
 pub mod simulation;
 pub mod tests;
+pub mod timeline;
 pub mod ui;
