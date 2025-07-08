@@ -6,6 +6,7 @@ use lightshow::camera::CameraPlugin;
 use lightshow::effects::EffectsPlugin;
 use lightshow::fixtures::FixturesPlugin;
 use lightshow::layers::LayersPlugin;
+use lightshow::midi::MidiPlugin;
 use lightshow::network::NetworkPlugin;
 use lightshow::simulation::SimulationPlugin;
 use lightshow::ui::UiPlugin;
@@ -24,6 +25,7 @@ fn main() {
             enable_multipass_for_primary_context: true,
         })
         .add_plugins(UiPlugin)
+        .add_plugins(MidiPlugin)
         .add_plugins(NetworkPlugin)
         .run();
 }
