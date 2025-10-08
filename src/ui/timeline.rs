@@ -1,6 +1,6 @@
 use bevy_egui::egui::{self, Color32, Sense, Stroke, Ui, Vec2};
 
-use crate::{layers::*, simulation::*};
+use crate::timeline::{layers::*, playback::*};
 
 pub fn draw_timeline(
     ui: &mut Ui,

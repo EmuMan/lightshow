@@ -1,0 +1,80 @@
+Effects:
+- Effect (struct)
+  - Stored in a global SimpleStore
+  - Stores universal information about the effect
+  - Contains an EffectInfo for more specific informatoin
+- EffectInfo (enum/component)
+  - Stores initialization information for the effect
+- ActiveEffect (entity)
+  - Represents the playing instance of an effect
+  - Contains a LocalTime that represents the actual current play time
+  - Contains a SimpleHandle to an Effect
+  - Contains a duplicate version of the EffectInfo that is modified with keyframes
+
+Layers:
+- Layer (struct)
+  - Stored in a global SimpleStore
+  - Contains a LayerInfo
+  - Contains a vector of Tracks
+- LayerInfo (struct)
+  - Represents the parameters associated with a layer on the timeline
+- ActiveLayer (entity)
+  - Represents the playing instance of a layer
+  - Contains a LocalTime that represents the actual current play time
+  - Contains a SimpleHandle to a Layer
+  - Contains a vector of handles to ActiveTrack entities
+
+Tracks:
+- Track (struct)
+  - Contains a series of keyframes that refer to both it and the elements inside of it
+  - Contains a TrackInfo
+  - Contains a TrackContents
+- TrackInfo (struct)
+  - Contains various information about a track (blending mode, opacity, etc.)
+- TrackContents (enum)
+  - EffectTrack
+    - Contains a SimpleHandle to an EffectInfo
+  - LayerTrack
+    - Contains multiple Clips
+  - TriggerTrack
+    - Contains a SimpleHandle to a LayerInfo
+    - Plays the associated layer when triggered
+- ActiveTrack (entity)
+  - Represents the playing instance of a track
+  - Contains a LocalTime (directly derived from the parent ActiveLayer LocalTime)
+  - Contains a duplicate TrackInfo that is affected by keyframes
+  - Contains a TrackReference (SimpleHandle<Layer> plus index)
+  - Contains an ActiveTrackContents
+- ActiveTrackContents (enum/component)
+  - ActiveEffectTrack
+    - Contains a handle to an ActiveEffect entity
+  - ActiveLayerTrack
+    - Contains a handle to an ActiveLayer entity (a track can only play one layer at a time)
+  - ActiveTriggerTrack
+    - Contains a vector of PastTrigger (struct)s:
+      - The GlobalTime the trigger was triggered
+      - The GlobalTime the trigger expires (initial time + layer length)
+      - A handle to the ActiveLayer entity that was spawned from the trigger
+
+Clips (struct):
+- Contains a SimpleHandle to a LayerInfo
+- Has a start time, offset, duration, etc.
+
+LayerTree (struct/resource):
+- Basically a dictionary
+- Keys = index tuple, values = entity IDs
+
+
+Each tick:
+- Layer tree clear
+  - Only if a layer was modified (track order, deletion, etc.)
+  - Remove all Active______ entities from the world
+- Layer tree maintenance
+  - Create the primary ActiveLayer if it does not exist
+  - Start with the primary ActiveLayer
+  - Recursively:
+    - For each track in the current layer:
+      - Look up that track in the LayerTree
+      - If the track is a layer track with no current layer, ignore it
+      - If the track does not exist, create it
+      - If the track is a layer track and is playing a layer, recurse on that layer

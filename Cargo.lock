@@ -411,6 +411,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy-trait-query"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0536fb7ec58a26201bd1a30b89267bb100ee0dcb12edc6c472b3bc38f45f1447"
+dependencies = [
+ "bevy-trait-query-impl",
+ "bevy_app",
+ "bevy_ecs",
+ "tracing",
+]
+
+[[package]]
+name = "bevy-trait-query-impl"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d62739c868c0dcbf469df5235b738be46510dd6fc8fc7f2240106ba6610d0754"
+dependencies = [
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "bevy_a11y"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3180,6 +3204,7 @@ version = "0.1.2"
 dependencies = [
  "artnet_protocol",
  "bevy",
+ "bevy-trait-query",
  "bevy_egui",
  "midir",
 ]

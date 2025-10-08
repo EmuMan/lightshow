@@ -2,7 +2,10 @@ use bevy::prelude::*;
 
 use bevy_egui::{egui, EguiContexts};
 
-use crate::{layers::*, simple_store::SimpleStore, simulation::*};
+use crate::{
+    simple_store::SimpleStore,
+    timeline::{layers::*, playback::*},
+};
 
 pub mod timeline;
 

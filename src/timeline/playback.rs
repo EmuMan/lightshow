@@ -1,14 +1,14 @@
 use bevy::prelude::*;
 
-use crate::{layers::*, simple_store::SimpleStore, tests::*};
+use crate::{simple_store::SimpleStore, tests, timeline::layers::*};
 
-pub struct SimulationPlugin;
+pub struct PlaybackPlugin;
 
-impl Plugin for SimulationPlugin {
+impl Plugin for PlaybackPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PlaybackInformation>()
             .add_systems(Update, increment_playback_time)
-            .add_systems(Startup, pulse_test_startup);
+            .add_systems(Startup, tests::single_pulse::pulse_test_startup);
     }
 }
 

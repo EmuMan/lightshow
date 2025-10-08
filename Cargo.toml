@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 artnet_protocol = "0.4.3"
 bevy = { version = "0.16", features = ["dynamic_linking"] }
+bevy-trait-query = "0.16.0"
 bevy_egui = "0.34.1"
 midir = "0.10.1"
 
