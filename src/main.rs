@@ -19,9 +19,7 @@ fn main() {
         .add_plugins(CameraPlugin)
         .add_plugins(FixturesPlugin)
         .add_plugins(EffectsPlugin)
-        .add_plugins(EguiPlugin {
-            enable_multipass_for_primary_context: true,
-        })
+        .add_plugins(EguiPlugin::default())
         .add_plugins(UiPlugin)
         .add_plugins(MidiPlugin)
         .add_plugins(NetworkPlugin)
