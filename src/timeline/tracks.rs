@@ -2,11 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     simple_store::SimpleHandle,
-    timeline::{
-        effects::Effect,
-        keyframes::Keyframe,
-        layers::{ActiveLayer, Layer, LayerInfo},
-    },
+    timeline::{effects::Effect, keyframes::Keyframe, layers::Layer},
 };
 
 #[derive(Debug)]
@@ -24,34 +20,14 @@ pub struct TrackInfo {
 
 #[derive(Debug)]
 pub enum TrackContents {
-    EffectTrack { effect: SimpleHandle<Effect> },
+    EffectTrack { effect_handle: SimpleHandle<Effect> },
     LayerTrack { clips: Vec<Clip> },
     TriggerTrack { layer_handle: SimpleHandle<Layer> },
 }
 
-#[derive(Debug, Component)]
-pub struct ActiveTrack {
-    pub original: TrackReference,
-    pub current_info: TrackInfo,
-}
-
-#[derive(Debug, Component)]
-pub enum ActiveTrackContents {
-    ActiveEffectTrack { active_effect_entity: Entity },
-    ActiveLayerTrack { active_layer_entity: Entity },
-    ActiveTriggerTrack { past_triggers: Vec<PastTrigger> },
-}
-
-#[derive(Debug)]
-pub struct PastTrigger {
-    pub trigger_global_time: f64,
-    pub expiration_global_time: f64,
-    pub created_layer: SimpleHandle<ActiveLayer>,
-}
-
 #[derive(Debug)]
 pub struct Clip {
-    pub layer: SimpleHandle<LayerInfo>,
+    pub layer: SimpleHandle<Layer>,
     pub time_segment: TimeSegment,
 }
 
@@ -85,5 +61,14 @@ pub enum BlendingMode {
 #[derive(Debug)]
 pub struct TrackReference {
     pub layer: SimpleHandle<Layer>,
-    pub index: u64,
+    pub index: usize,
+}
+
+impl TrackReference {
+    pub fn new(layer_handle: SimpleHandle<Layer>, track_index: usize) -> Self {
+        Self {
+            layer: layer_handle,
+            index: track_index,
+        }
+    }
 }

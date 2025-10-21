@@ -1,9 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{
-    simple_store::{SimpleHandle, SimpleStore},
-    timeline::keyframes::Keyframes,
-};
+use crate::{simple_store::SimpleStore, timeline::keyframes::Keyframes};
 
 pub mod color;
 
@@ -21,20 +18,15 @@ pub struct Effect {
     pub info: EffectInfo,
 }
 
-#[derive(Debug, Component)]
+#[derive(Debug, Clone)]
 pub enum EffectInfo {
     ColorFillEffect(color::fill::ColorFillEffect),
     ColorShockwaveEffect(color::shockwave::ColorShockwaveEffect),
 }
 
+// TODO: Using this will make life MUCH easier.
 pub trait EffectTrait<T>: Send + Sync + std::fmt::Debug {
     fn get_value(&self, position: Vec3) -> T;
     fn update(&mut self, keyframes: &Keyframes, current_time: f64);
     fn insert_component(&self, entity_commands: &mut EntityCommands);
-}
-
-#[derive(Debug, Component)]
-pub struct ActiveEffect {
-    pub original: SimpleHandle<Effect>,
-    pub current_info: EffectInfo,
 }

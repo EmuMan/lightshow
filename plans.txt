@@ -7,7 +7,6 @@ Effects:
   - Stores initialization information for the effect
 - ActiveEffect (entity)
   - Represents the playing instance of an effect
-  - Contains a LocalTime that represents the actual current play time
   - Contains a SimpleHandle to an Effect
   - Contains a duplicate version of the EffectInfo that is modified with keyframes
 

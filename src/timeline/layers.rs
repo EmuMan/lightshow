@@ -25,14 +25,7 @@ pub struct Layer {
     pub info: LayerInfo,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct LayerInfo {
     pub strength: f64,
-}
-
-#[derive(Debug, Component)]
-pub struct ActiveLayer {
-    pub original: SimpleHandle<Layer>,
-    pub current_info: LayerInfo,
-    pub children: Vec<Entity>,
 }

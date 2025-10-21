@@ -86,9 +86,7 @@ pub fn pulse_test_startup(
         opacity: 1.0,
     };
 
-    let track_contents = TrackContents::EffectTrack {
-        effect: effect_handle,
-    };
+    let track_contents = TrackContents::EffectTrack { effect_handle };
 
     let track = Track {
         keyframes,
