@@ -31,9 +31,26 @@ pub struct Clip {
     pub time_segment: TimeSegment,
 }
 
+pub trait ClipsExt {
+    fn find_current(&self, time: f64) -> Option<&Clip>;
+}
+
+impl ClipsExt for [Clip] {
+    fn find_current(&self, time: f64) -> Option<&Clip> {
+        for clip in self {
+            if clip.time_segment.start_time <= time
+                && (clip.time_segment.start_time + clip.time_segment.duration) > time
+            {
+                return Some(clip);
+            }
+        }
+        None
+    }
+}
+
 // used when recursively processing layers to determine playback specifics
 // for individual layers
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct TimeSegment {
     pub start_time: f64,
     pub duration: f64,
