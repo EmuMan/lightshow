@@ -1,10 +1,10 @@
 use bevy::prelude::*;
 
-use bevy_egui::{egui, EguiContexts, EguiPrimaryContextPass};
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::{
     simple_store::SimpleStore,
-    timeline::{layers::*, playback::*},
+    timeline::{playback::*, sequences::*},
 };
 
 pub mod timeline;
@@ -19,8 +19,8 @@ impl Plugin for UiPlugin {
 
 pub fn ui_playback_system(
     mut playback: ResMut<PlaybackInformation>,
-    primary_layer: Res<PrimaryLayer>,
-    layer_store: Res<SimpleStore<Layer>>,
+    primary_sequence: Res<PrimarySequence>,
+    sequence_store: Res<SimpleStore<Sequence>>,
     mut contexts: EguiContexts,
 ) {
     match contexts.ctx_mut() {
@@ -39,9 +39,11 @@ pub fn ui_playback_system(
                 let keyframe_times: Vec<f64> = Vec::new();
                 // TODO: Add keyframe times back?
 
-                let primary_layer = primary_layer.0.and_then(|handle| layer_store.get(handle));
+                let primary_sequence = primary_sequence
+                    .0
+                    .and_then(|handle| sequence_store.get(handle));
 
-                timeline::draw_timeline(ui, &mut playback, keyframe_times, primary_layer);
+                timeline::draw_timeline(ui, &mut playback, keyframe_times, primary_sequence);
             });
         }
         Err(error) => println!("Error: Could not get egui context:\n{}", error),

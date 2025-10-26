@@ -1,12 +1,12 @@
 use bevy_egui::egui::{self, Color32, Sense, Stroke, Ui, Vec2};
 
-use crate::timeline::{layers::*, playback::*};
+use crate::timeline::{playback::*, sequences::*};
 
 pub fn draw_timeline(
     ui: &mut Ui,
     playback: &mut PlaybackInformation,
     keyframe_positions: Vec<f64>,
-    active_layer: Option<&Layer>,
+    active_sequence: Option<&Sequence>,
 ) -> egui::Response {
     let (response, painter) = ui.allocate_painter(
         Vec2::new(ui.available_width(), 50.0),
@@ -16,7 +16,7 @@ pub fn draw_timeline(
     // background
     painter.rect_filled(response.rect, 0.0, Color32::from_black_alpha(128));
 
-    let Some(active_layer) = active_layer else {
+    let Some(active_sequence) = active_sequence else {
         return response;
     };
 
@@ -25,18 +25,18 @@ pub fn draw_timeline(
         if let Some(pos) = click_pos {
             let local_pos = pos - response.rect.min;
             let percentage = local_pos.x / response.rect.width();
-            playback.current_time = active_layer.length * percentage as f64;
+            playback.current_time = active_sequence.length * percentage as f64;
         }
     }
 
     let playhead_pos = response.rect.min
         + Vec2::new(
-            (playback.current_time / active_layer.length) as f32 * response.rect.width(),
+            (playback.current_time / active_sequence.length) as f32 * response.rect.width(),
             0.0,
         );
 
     // bar lines
-    let num_bars = (active_layer.length * playback.bpm / 60.0).ceil() as usize;
+    let num_bars = (active_sequence.length * playback.bpm / 60.0).ceil() as usize;
     for i in 0..num_bars {
         let x = i as f32 * response.rect.width() / num_bars as f32;
         let bar_pos = response.rect.min + Vec2::new(x, 0.0);
@@ -59,7 +59,7 @@ pub fn draw_timeline(
 
     // keyframes
     for pos in keyframe_positions {
-        let x = pos as f32 / active_layer.length as f32 * response.rect.width();
+        let x = pos as f32 / active_sequence.length as f32 * response.rect.width();
         let keyframe_pos = response.rect.min + Vec2::new(x, 0.0);
         painter.line_segment(
             [

@@ -81,7 +81,7 @@ impl<T> SimpleStore<T> {
     pub fn add(&mut self, item: T) -> SimpleHandle<T> {
         if let Some((entry_index, open_entry)) = self.get_open_entry_mut() {
             if open_entry.item.is_some() {
-                panic!("SimpleStore attempted to override existing layer.")
+                panic!("SimpleStore attempted to override existing entry.")
             }
             open_entry.item = Some(item);
             open_entry.current_generation += 1;

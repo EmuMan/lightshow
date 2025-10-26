@@ -6,7 +6,7 @@ use crate::{
     fixtures::*,
     network::*,
     simple_store::*,
-    timeline::{effects::*, keyframes::*, layers::*, tracks::*},
+    timeline::{effects::*, keyframes::*, sequences::*, tracks::*},
 };
 
 pub fn pulse_test_startup(
@@ -14,8 +14,8 @@ pub fn pulse_test_startup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut active_socket: ResMut<ActiveSocket>,
-    mut primary_layer: ResMut<PrimaryLayer>,
-    mut layer_store: ResMut<SimpleStore<Layer>>,
+    mut primary_sequence: ResMut<PrimarySequence>,
+    mut sequence_store: ResMut<SimpleStore<Sequence>>,
     mut effect_store: ResMut<SimpleStore<Effect>>,
 ) {
     active_socket.socket = Some(UdpSocket::bind(("0.0.0.0", 6454)).unwrap());
@@ -94,16 +94,16 @@ pub fn pulse_test_startup(
         contents: track_contents,
     };
 
-    let layer_info = LayerInfo { strength: 1.0 };
+    let sequence_info = SequenceInfo { strength: 1.0 };
 
-    let layer = Layer {
-        name: "Main Layer".into(),
+    let sequence = Sequence {
+        name: "Main Sequence".into(),
         length: 4.,
         tracks: vec![track],
-        info: layer_info,
+        info: sequence_info,
     };
 
-    let layer_handle = layer_store.add(layer);
+    let sequence_handle = sequence_store.add(sequence);
 
-    primary_layer.0 = Some(layer_handle);
+    primary_sequence.0 = Some(sequence_handle);
 }

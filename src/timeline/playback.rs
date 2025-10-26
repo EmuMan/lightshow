@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{simple_store::SimpleStore, tests, timeline::layers::*};
+use crate::{simple_store::SimpleStore, tests, timeline::sequences::*};
 
 pub struct PlaybackPlugin;
 
@@ -34,17 +34,20 @@ impl Default for PlaybackInformation {
 pub fn increment_playback_time(
     time: Res<Time>,
     mut playback: ResMut<PlaybackInformation>,
-    primary_layer: Res<PrimaryLayer>,
-    layer_store: Res<SimpleStore<Layer>>,
+    primary_sequence: Res<PrimarySequence>,
+    sequence_store: Res<SimpleStore<Sequence>>,
 ) {
-    let Some(layer) = primary_layer.0.and_then(|handle| layer_store.get(handle)) else {
+    let Some(sequence) = primary_sequence
+        .0
+        .and_then(|handle| sequence_store.get(handle))
+    else {
         playback.current_time = 0.0;
         playback.is_playing = false;
         return;
     };
     if playback.is_playing {
         playback.current_time += time.delta_secs_f64();
-        if playback.current_time > layer.length {
+        if playback.current_time > sequence.length {
             playback.current_time = 0.0;
         }
     }

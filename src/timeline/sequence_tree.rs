@@ -2,34 +2,34 @@ use crate::{
     simple_store::{SimpleHandle, SimpleStore},
     timeline::{
         effects::{Effect, EffectInfo},
-        layers::{Layer, LayerInfo, PrimaryLayer},
         playback::PlaybackInformation,
+        sequences::{PrimarySequence, Sequence, SequenceInfo},
         tracks::{Clip, ClipsExt, TimeSegment, Track, TrackContents},
     },
 };
 use bevy::prelude::*;
 
-// ActiveLayer -> many ActiveTrack nodes
+// ActiveSequence -> many ActiveTrack nodes
 #[derive(Debug)]
-pub struct ActiveLayer {
+pub struct ActiveSequence {
     local_time: f64,
-    original: SimpleHandle<Layer>,
-    current_info: LayerInfo,
+    original: SimpleHandle<Sequence>,
+    current_info: SequenceInfo,
     children: Vec<ActiveTrack>,
 }
 
-impl ActiveLayer {
-    fn from_layer(layer: &Layer, layer_handle: SimpleHandle<Layer>) -> Self {
+impl ActiveSequence {
+    fn from_sequence(sequence: &Sequence, sequence_handle: SimpleHandle<Sequence>) -> Self {
         Self {
             local_time: 0.0,
-            original: layer_handle,
-            current_info: layer.info.clone(),
+            original: sequence_handle,
+            current_info: sequence.info.clone(),
             children: Vec::new(),
         }
     }
 }
 
-// EffectActiveTrack -> nothing
+// ActiveSequenceTrack -> nothing
 #[derive(Debug)]
 pub struct ActiveEffectTrack {
     local_time: f64,
@@ -37,14 +37,14 @@ pub struct ActiveEffectTrack {
     current_info: EffectInfo,
 }
 
-// LayerActiveTrack -> potentially one ActiveLayer node
+// ActiveSequenceTrack -> potentially one ActiveSequence node
 #[derive(Debug)]
-pub struct ActiveLayerTrack {
+pub struct ActiveSequenceTrack {
     local_time: f64,
-    child: Option<(TimeSegment, ActiveLayer)>,
+    child: Option<(TimeSegment, ActiveSequence)>,
 }
 
-// TriggerActiveTrack -> many ActiveLayer nodes
+// ActiveTriggerTrack -> many ActiveSequence nodes
 #[derive(Debug)]
 pub struct ActiveTriggerTrack {
     // TODO: implement trigger tracks
@@ -53,7 +53,7 @@ pub struct ActiveTriggerTrack {
 #[derive(Debug)]
 pub enum ActiveTrack {
     ActiveEffectTrack(ActiveEffectTrack),
-    ActiveLayerTrack(ActiveLayerTrack),
+    ActiveSequenceTrack(ActiveSequenceTrack),
     ActiveTriggerTrack(ActiveTriggerTrack),
 }
 
@@ -63,9 +63,9 @@ impl From<ActiveEffectTrack> for ActiveTrack {
     }
 }
 
-impl From<ActiveLayerTrack> for ActiveTrack {
-    fn from(value: ActiveLayerTrack) -> Self {
-        Self::ActiveLayerTrack(value)
+impl From<ActiveSequenceTrack> for ActiveTrack {
+    fn from(value: ActiveSequenceTrack) -> Self {
+        Self::ActiveSequenceTrack(value)
     }
 }
 
@@ -88,20 +88,20 @@ impl ActiveTrack {
                     .clone(),
             }
             .into(),
-            TrackContents::LayerTrack { clips } => ActiveLayerTrack {
+            TrackContents::SequenceTrack { clips } => ActiveSequenceTrack {
                 local_time: 0.0,
                 child: None, // will be set later down the line
             }
             .into(),
-            TrackContents::TriggerTrack { layer_handle } => ActiveTriggerTrack {}.into(), // TODO: implement trigger tracks
+            TrackContents::TriggerTrack { sequence_handle } => ActiveTriggerTrack {}.into(), // TODO: implement trigger tracks
         }
     }
 
     fn as_active_effect_track(&mut self) -> &mut ActiveEffectTrack {
         match self {
             ActiveTrack::ActiveEffectTrack(active_effect_track) => active_effect_track,
-            ActiveTrack::ActiveLayerTrack(_) => {
-                panic!("attempted to unwrap ActiveLayerTrack as ActiveEffectTrack")
+            ActiveTrack::ActiveSequenceTrack(_) => {
+                panic!("attempted to unwrap ActiveSequenceTrack as ActiveEffectTrack")
             }
             ActiveTrack::ActiveTriggerTrack(_) => {
                 panic!("attempted to unwrap ActiveTriggerTrack as ActiveEffectTrack")
@@ -109,14 +109,14 @@ impl ActiveTrack {
         }
     }
 
-    fn as_active_layer_track(&mut self) -> &mut ActiveLayerTrack {
+    fn as_active_sequence_track(&mut self) -> &mut ActiveSequenceTrack {
         match self {
             ActiveTrack::ActiveEffectTrack(_) => {
-                panic!("attempted to unwrap ActiveEffectTrack as ActiveLayerTrack")
+                panic!("attempted to unwrap ActiveEffectTrack as ActiveSequenceTrack")
             }
-            ActiveTrack::ActiveLayerTrack(active_layer_track) => active_layer_track,
+            ActiveTrack::ActiveSequenceTrack(active_sequence_track) => active_sequence_track,
             ActiveTrack::ActiveTriggerTrack(_) => {
-                panic!("attempted to unwrap ActiveTriggerTrack as ActiveLayerTrack")
+                panic!("attempted to unwrap ActiveTriggerTrack as ActiveSequenceTrack")
             }
         }
     }
@@ -126,8 +126,8 @@ impl ActiveTrack {
             ActiveTrack::ActiveEffectTrack(_) => {
                 panic!("attempted to unwrap ActiveEffectTrack as ActiveTriggerTrack")
             }
-            ActiveTrack::ActiveLayerTrack(_) => {
-                panic!("attempted to unwrap ActiveLayerTrack as ActiveTriggerTrack")
+            ActiveTrack::ActiveSequenceTrack(_) => {
+                panic!("attempted to unwrap ActiveSequenceTrack as ActiveTriggerTrack")
             }
             ActiveTrack::ActiveTriggerTrack(active_trigger_track) => active_trigger_track,
         }
@@ -135,11 +135,11 @@ impl ActiveTrack {
 }
 
 #[derive(Resource, Debug, Default)]
-pub struct LayerTree {
-    primary_node: Option<ActiveLayer>,
+pub struct SequenceTree {
+    primary_node: Option<ActiveSequence>,
 }
 
-impl LayerTree {
+impl SequenceTree {
     pub fn new() -> Self {
         Self::default()
     }
@@ -150,73 +150,75 @@ impl LayerTree {
 
     pub fn update_recursive(
         &mut self,
-        layer_store: &SimpleStore<Layer>,
+        sequence_store: &SimpleStore<Sequence>,
         effect_store: &SimpleStore<Effect>,
-        primary_layer_handle: SimpleHandle<Layer>,
-        primary_layer_time: f64,
+        primary_sequence_handle: SimpleHandle<Sequence>,
+        primary_sequence_time: f64,
     ) {
-        match layer_store.get(primary_layer_handle) {
-            Some(primary_layer) => LayerTree::update_recursive_layer(
-                layer_store,
-                effect_store,
-                primary_layer_handle,
-                // create the primary node if it does not exist
-                self.primary_node
-                    .get_or_insert(ActiveLayer::from_layer(primary_layer, primary_layer_handle)),
-                primary_layer_time,
-            ),
-            // TODO: should this be a warning?
-            None => self.primary_node = None,
-        }
+        let primary_sequence = sequence_store
+            .get(primary_sequence_handle)
+            .expect("sequence tree update was passed invalid sequence handle");
+        SequenceTree::update_recursive_sequence(
+            sequence_store,
+            effect_store,
+            primary_sequence_handle,
+            // create the primary node if it does not exist
+            self.primary_node
+                .get_or_insert(ActiveSequence::from_sequence(
+                    primary_sequence,
+                    primary_sequence_handle,
+                )),
+            primary_sequence_time,
+        )
     }
 
-    fn update_recursive_layer(
-        layer_store: &SimpleStore<Layer>,
+    fn update_recursive_sequence(
+        sequence_store: &SimpleStore<Sequence>,
         effect_store: &SimpleStore<Effect>,
-        current_layer_handle: SimpleHandle<Layer>,
-        current_active_layer: &mut ActiveLayer,
+        current_sequence_handle: SimpleHandle<Sequence>,
+        current_active_sequence: &mut ActiveSequence,
         current_time: f64,
     ) {
-        let Some(current_layer) = layer_store.get(current_layer_handle) else {
-            panic!("encountered layer that does not exist while updating layer tree");
+        let Some(current_sequence) = sequence_store.get(current_sequence_handle) else {
+            panic!("encountered sequence that does not exist while updating sequence tree");
         };
 
-        current_active_layer.local_time = current_time;
+        current_active_sequence.local_time = current_time;
         // TODO: update current info
 
-        let needs_initialization = current_active_layer.children.is_empty();
+        let needs_initialization = current_active_sequence.children.is_empty();
 
-        for (track_i, track) in current_layer.tracks.iter().enumerate() {
+        for (track_i, track) in current_sequence.tracks.iter().enumerate() {
             if needs_initialization {
-                current_active_layer
+                current_active_sequence
                     .children
                     .push(ActiveTrack::from_track(track, effect_store));
             }
 
-            let active_child_element = current_active_layer
+            let active_child_element = current_active_sequence
                 .children
                 .get_mut(track_i)
-                .expect("layer and active layer track counts don't match");
+                .expect("sequence and active sequence track counts don't match");
 
             match &track.contents {
                 TrackContents::EffectTrack { effect_handle } => {
-                    LayerTree::update_recursive_effect_track(
+                    SequenceTree::update_recursive_effect_track(
                         effect_store,
                         *effect_handle,
                         active_child_element.as_active_effect_track(),
                         current_time,
                     );
                 }
-                TrackContents::LayerTrack { clips } => {
-                    LayerTree::update_recursive_layer_track(
-                        layer_store,
+                TrackContents::SequenceTrack { clips } => {
+                    SequenceTree::update_recursive_sequence_track(
+                        sequence_store,
                         effect_store,
                         clips,
-                        active_child_element.as_active_layer_track(),
+                        active_child_element.as_active_sequence_track(),
                         current_time,
                     );
                 }
-                TrackContents::TriggerTrack { layer_handle } => {
+                TrackContents::TriggerTrack { sequence_handle } => {
                     // TODO: recurse on trigger tracks
                 }
             }
@@ -231,56 +233,62 @@ impl LayerTree {
     ) {
         let current_effect = effect_store
             .get(current_effect_handle)
-            .expect("encountered effect that does not exist while updating layer tree");
+            .expect("encountered effect that does not exist while updating sequence tree");
 
         current_active_track.local_time = current_time;
         // TODO: update current info
         // No need to recurse!
     }
 
-    fn update_recursive_layer_track(
-        layer_store: &SimpleStore<Layer>,
+    fn update_recursive_sequence_track(
+        sequence_store: &SimpleStore<Sequence>,
         effect_store: &SimpleStore<Effect>,
         clips: &Vec<Clip>,
-        current_active_track: &mut ActiveLayerTrack,
+        current_active_track: &mut ActiveSequenceTrack,
         current_time: f64,
     ) {
         current_active_track.local_time = current_time;
+
         let current_clip = clips.find_current(current_time);
         match current_clip {
             Some(current_clip) => {
-                let current_layer = layer_store
-                    .get(current_clip.layer)
-                    .expect("attempted to get layer that does not exist from active track clip");
+                let current_sequence = sequence_store
+                    .get(current_clip.sequence_handle)
+                    .expect("attempted to get sequence that does not exist from active track clip");
                 match &mut current_active_track.child {
-                    Some((time_segment, active_layer)) => {
+                    Some((time_segment, active_sequence)) => {
                         // the clips are already guaranteed to be on the same
                         // track, so only the time segment needs to be checked
                         if *time_segment != current_clip.time_segment {
                             // there is already a clip but it is the wrong one, so swap it out
-                            *active_layer =
-                                ActiveLayer::from_layer(current_layer, current_clip.layer);
+                            *active_sequence = ActiveSequence::from_sequence(
+                                current_sequence,
+                                current_clip.sequence_handle,
+                            );
                         }
                     }
                     None => {
                         // there was no clip, so make a new one
                         current_active_track.child = Some((
                             current_clip.time_segment,
-                            ActiveLayer::from_layer(current_layer, current_clip.layer),
+                            ActiveSequence::from_sequence(
+                                current_sequence,
+                                current_clip.sequence_handle,
+                            ),
                         ));
                     }
                 }
 
                 // now that the child has been updated, recurse on it
-                let (time_segment, next_active_layer) = current_active_track
+                let (time_segment, next_active_sequence) = current_active_track
                     .child
                     .as_mut()
-                    .expect("ActiveLayerTrack child somehow does not exist after creation");
-                LayerTree::update_recursive_layer(
-                    layer_store,
+                    .expect("ActiveSequenceTrack child somehow does not exist after creation");
+                SequenceTree::update_recursive_sequence(
+                    sequence_store,
                     effect_store,
-                    current_clip.layer,
-                    next_active_layer,
+                    current_clip.sequence_handle,
+                    next_active_sequence,
                     current_time - time_segment.start_time + time_segment.start_offset,
                 );
             }
@@ -291,27 +299,27 @@ impl LayerTree {
 }
 
 #[derive(Event)]
-pub struct ClearLayerTree {}
+pub struct ClearSequenceTree {}
 
-fn clear_layer_tree(_reset: On<ClearLayerTree>, mut layer_tree: ResMut<LayerTree>) {
-    layer_tree.clear();
+fn clear_sequence_tree(_reset: On<ClearSequenceTree>, mut sequence_tree: ResMut<SequenceTree>) {
+    sequence_tree.clear();
 }
 
-fn update_layer_tree(
-    layer_store: Res<SimpleStore<Layer>>,
+fn update_sequence_tree(
+    sequence_store: Res<SimpleStore<Sequence>>,
     effect_store: Res<SimpleStore<Effect>>,
-    primary_layer: Res<PrimaryLayer>,
-    mut layer_tree: ResMut<LayerTree>,
+    primary_sequence: Res<PrimarySequence>,
+    mut sequence_tree: ResMut<SequenceTree>,
     playback_info: Res<PlaybackInformation>,
 ) {
-    let Some(primary_layer_handle) = primary_layer.0 else {
+    let Some(primary_sequence_handle) = primary_sequence.0 else {
         return;
     };
 
-    layer_tree.update_recursive(
-        &layer_store,
+    sequence_tree.update_recursive(
+        &sequence_store,
         &effect_store,
-        primary_layer_handle,
+        primary_sequence_handle,
         playback_info.current_time,
     );
 }

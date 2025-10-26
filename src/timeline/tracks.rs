@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     simple_store::SimpleHandle,
-    timeline::{effects::Effect, keyframes::Keyframe, layers::Layer},
+    timeline::{effects::Effect, keyframes::Keyframe, sequences::Sequence},
 };
 
 #[derive(Debug)]
@@ -20,14 +20,20 @@ pub struct TrackInfo {
 
 #[derive(Debug)]
 pub enum TrackContents {
-    EffectTrack { effect_handle: SimpleHandle<Effect> },
-    LayerTrack { clips: Vec<Clip> },
-    TriggerTrack { layer_handle: SimpleHandle<Layer> },
+    EffectTrack {
+        effect_handle: SimpleHandle<Effect>,
+    },
+    SequenceTrack {
+        clips: Vec<Clip>,
+    },
+    TriggerTrack {
+        sequence_handle: SimpleHandle<Sequence>,
+    },
 }
 
 #[derive(Debug)]
 pub struct Clip {
-    pub layer: SimpleHandle<Layer>,
+    pub sequence_handle: SimpleHandle<Sequence>,
     pub time_segment: TimeSegment,
 }
 
@@ -48,8 +54,8 @@ impl ClipsExt for [Clip] {
     }
 }
 
-// used when recursively processing layers to determine playback specifics
-// for individual layers
+// used when recursively processing sequences to determine playback specifics
+// for individual sequences
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct TimeSegment {
     pub start_time: f64,
@@ -77,14 +83,14 @@ pub enum BlendingMode {
 
 #[derive(Debug)]
 pub struct TrackReference {
-    pub layer: SimpleHandle<Layer>,
+    pub sequence: SimpleHandle<Sequence>,
     pub index: usize,
 }
 
 impl TrackReference {
-    pub fn new(layer_handle: SimpleHandle<Layer>, track_index: usize) -> Self {
+    pub fn new(sequence_handle: SimpleHandle<Sequence>, track_index: usize) -> Self {
         Self {
-            layer: layer_handle,
+            sequence: sequence_handle,
             index: track_index,
         }
     }

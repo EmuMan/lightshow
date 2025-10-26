@@ -1,6 +1,6 @@
 pub mod effects;
 pub mod keyframes;
-pub mod layer_tree;
-pub mod layers;
 pub mod playback;
+pub mod sequence_tree;
+pub mod sequences;
 pub mod tracks;

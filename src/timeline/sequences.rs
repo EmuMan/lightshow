@@ -5,27 +5,27 @@ use crate::{
     timeline::tracks::Track,
 };
 
-pub struct LayersPlugin;
+pub struct SequencesPlugin;
 
-impl Plugin for LayersPlugin {
+impl Plugin for SequencesPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<SimpleStore<Layer>>()
-            .init_resource::<PrimaryLayer>();
+        app.init_resource::<SimpleStore<Sequence>>()
+            .init_resource::<PrimarySequence>();
     }
 }
 
 #[derive(Resource, Default, Debug)]
-pub struct PrimaryLayer(pub Option<SimpleHandle<Layer>>);
+pub struct PrimarySequence(pub Option<SimpleHandle<Sequence>>);
 
 #[derive(Debug)]
-pub struct Layer {
+pub struct Sequence {
     pub name: String,
     pub length: f64,
     pub tracks: Vec<Track>,
-    pub info: LayerInfo,
+    pub info: SequenceInfo,
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct LayerInfo {
+pub struct SequenceInfo {
     pub strength: f64,
 }
