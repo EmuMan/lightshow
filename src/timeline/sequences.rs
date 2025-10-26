@@ -22,10 +22,4 @@ pub struct Sequence {
     pub name: String,
     pub length: f64,
     pub tracks: Vec<Track>,
-    pub info: SequenceInfo,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct SequenceInfo {
-    pub strength: f64,
 }

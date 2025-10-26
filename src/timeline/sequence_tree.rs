@@ -1,9 +1,9 @@
 use crate::{
     simple_store::{SimpleHandle, SimpleStore},
     timeline::{
-        effects::{Effect, EffectInfo},
+        effects::{Effect, EffectInfo, EffectLike},
         playback::PlaybackInformation,
-        sequences::{PrimarySequence, Sequence, SequenceInfo},
+        sequences::{PrimarySequence, Sequence},
         tracks::{Clip, ClipsExt, TimeSegment, Track, TrackContents},
     },
 };
@@ -14,16 +14,14 @@ use bevy::prelude::*;
 pub struct ActiveSequence {
     local_time: f64,
     original: SimpleHandle<Sequence>,
-    current_info: SequenceInfo,
     children: Vec<ActiveTrack>,
 }
 
 impl ActiveSequence {
-    fn from_sequence(sequence: &Sequence, sequence_handle: SimpleHandle<Sequence>) -> Self {
+    fn from_sequence(sequence_handle: SimpleHandle<Sequence>) -> Self {
         Self {
             local_time: 0.0,
             original: sequence_handle,
-            current_info: sequence.info.clone(),
             children: Vec::new(),
         }
     }
@@ -155,19 +153,13 @@ impl SequenceTree {
         primary_sequence_handle: SimpleHandle<Sequence>,
         primary_sequence_time: f64,
     ) {
-        let primary_sequence = sequence_store
-            .get(primary_sequence_handle)
-            .expect("sequence tree update was passed invalid sequence handle");
         SequenceTree::update_recursive_sequence(
             sequence_store,
             effect_store,
             primary_sequence_handle,
             // create the primary node if it does not exist
             self.primary_node
-                .get_or_insert(ActiveSequence::from_sequence(
-                    primary_sequence,
-                    primary_sequence_handle,
-                )),
+                .get_or_insert(ActiveSequence::from_sequence(primary_sequence_handle)),
             primary_sequence_time,
         )
     }
@@ -184,7 +176,6 @@ impl SequenceTree {
         };
 
         current_active_sequence.local_time = current_time;
-        // TODO: update current info
 
         let needs_initialization = current_active_sequence.children.is_empty();
 
@@ -236,7 +227,11 @@ impl SequenceTree {
             .expect("encountered effect that does not exist while updating sequence tree");
 
         current_active_track.local_time = current_time;
-        // TODO: update current info
+
+        current_active_track
+            .current_info
+            .update(&current_effect.keyframes, current_time);
+
         // No need to recurse!
     }
 
@@ -252,29 +247,21 @@ impl SequenceTree {
         let current_clip = clips.find_current(current_time);
         match current_clip {
             Some(current_clip) => {
-                let current_sequence = sequence_store
-                    .get(current_clip.sequence_handle)
-                    .expect("attempted to get sequence that does not exist from active track clip");
                 match &mut current_active_track.child {
                     Some((time_segment, active_sequence)) => {
                         // the clips are already guaranteed to be on the same
                         // track, so only the time segment needs to be checked
                         if *time_segment != current_clip.time_segment {
                             // there is already a clip but it is the wrong one, so swap it out
-                            *active_sequence = ActiveSequence::from_sequence(
-                                current_sequence,
-                                current_clip.sequence_handle,
-                            );
+                            *active_sequence =
+                                ActiveSequence::from_sequence(current_clip.sequence_handle);
                         }
                     }
                     None => {
                         // there was no clip, so make a new one
                         current_active_track.child = Some((
                             current_clip.time_segment,
-                            ActiveSequence::from_sequence(
-                                current_sequence,
-                                current_clip.sequence_handle,
-                            ),
+                            ActiveSequence::from_sequence(current_clip.sequence_handle),
                         ));
                     }
                 }

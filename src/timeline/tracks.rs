@@ -7,7 +7,6 @@ use crate::{
 
 #[derive(Debug)]
 pub struct Track {
-    pub keyframes: Vec<Keyframe>,
     pub info: TrackInfo,
     pub contents: TrackContents,
 }

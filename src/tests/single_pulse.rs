@@ -52,20 +52,22 @@ pub fn pulse_test_startup(
         );
     }
 
-    let keyframes = vec![
-        Keyframe {
-            time: 0.,
-            interpolation: InterpolationType::LINEAR,
-            key: "radius".to_string(),
-            value: KeyframeValue::FloatKeyframe(0.),
-        },
-        Keyframe {
-            time: 3.,
-            interpolation: InterpolationType::LINEAR,
-            key: "radius".to_string(),
-            value: KeyframeValue::FloatKeyframe(300.),
-        },
-    ];
+    let keyframes = Keyframes {
+        keyframes: vec![
+            Keyframe {
+                time: 0.,
+                interpolation: InterpolationType::LINEAR,
+                key: "radius".to_string(),
+                value: KeyframeValue::FloatKeyframe(0.),
+            },
+            Keyframe {
+                time: 3.,
+                interpolation: InterpolationType::LINEAR,
+                key: "radius".to_string(),
+                value: KeyframeValue::FloatKeyframe(300.),
+            },
+        ],
+    };
 
     let effect_info = color::shockwave::ColorShockwaveEffect {
         color: Color::WHITE,
@@ -79,6 +81,7 @@ pub fn pulse_test_startup(
     let effect_handle = effect_store.add(Effect {
         groups: vec![0],
         info: EffectInfo::ColorShockwaveEffect(effect_info),
+        keyframes,
     });
 
     let track_info = TrackInfo {
@@ -89,18 +92,14 @@ pub fn pulse_test_startup(
     let track_contents = TrackContents::EffectTrack { effect_handle };
 
     let track = Track {
-        keyframes,
         info: track_info,
         contents: track_contents,
     };
-
-    let sequence_info = SequenceInfo { strength: 1.0 };
 
     let sequence = Sequence {
         name: "Main Sequence".into(),
         length: 4.,
         tracks: vec![track],
-        info: sequence_info,
     };
 
     let sequence_handle = sequence_store.add(sequence);

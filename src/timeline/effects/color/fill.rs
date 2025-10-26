@@ -5,9 +5,9 @@ pub struct ColorFillEffect {
     pub color: Color,
 }
 
-impl EffectTrait<Color> for ColorFillEffect {
-    fn get_value(&self, _position: Vec3) -> Color {
-        self.color
+impl EffectLike for ColorFillEffect {
+    fn get_value(&self, _position: Vec3) -> EffectOutputValue {
+        self.color.into()
     }
 
     fn update(&mut self, keyframes: &Keyframes, current_time: f64) {
