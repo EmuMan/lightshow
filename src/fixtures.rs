@@ -1,7 +1,11 @@
 use bevy::prelude::*;
 use derive_more::From;
 
-use crate::util::blending::colors::{ColorBlendingMode, blend_colors};
+use crate::{
+    network::{ArtNetConnection, ArtNetConnections, ArtNetNode},
+    timeline::sequence_tree::{FixtureInfo, SequenceTree},
+    util::blending::colors::{ColorBlendingMode, blend_colors},
+};
 
 pub mod color_light;
 
@@ -9,26 +13,36 @@ pub struct FixturesPlugin;
 
 impl Plugin for FixturesPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(FixedUpdate, color_light::add_data_to_buffer);
+        app.add_plugins(ColorFixturesPlugin)
+            .add_systems(FixedUpdate, update_fixtures)
+            .add_systems(FixedUpdate, apply_color_fixture_pending_values)
+            .add_systems(FixedUpdate, add_data_to_buffer);
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Debug, Default)]
+#[require(Transform, Mesh2d, MeshMaterial2d<ColorMaterial>)]
 pub struct Fixture {
     pub groups: Vec<u32>,
     pub input_type: FixtureType,
+    pub pending_value: Option<FixtureInput>,
 }
 
-#[derive(Component)]
-pub struct ColorLight {
-    pub radius: f32,
-    pub color_queue: Vec<Color>,
+impl Fixture {
+    pub fn new(groups: Vec<u32>, input_type: FixtureType) -> Self {
+        Self {
+            groups,
+            input_type,
+            pending_value: None,
+        }
+    }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub enum FixtureType {
     Color,
     Vec3,
+    #[default]
     Combined,
 }
 
@@ -96,6 +110,101 @@ impl FixtureInputVec for &mut [FixtureInput] {
         assert_eq!(self.len(), other.len());
         for (self_fixture, other_fixture) in self.iter_mut().zip(other) {
             self_fixture.merge(other_fixture, factor, color_blending_mode);
+        }
+    }
+}
+
+pub fn update_fixtures(
+    sequence_tree: Res<SequenceTree>,
+    mut fixture_query: Query<(&mut Fixture, &GlobalTransform)>,
+) {
+    let mut fixture_info: Vec<FixtureInfo> = Vec::new();
+
+    for (fixture, transform) in fixture_query.iter_mut() {
+        fixture_info.push(FixtureInfo {
+            groups: fixture.groups.clone(),
+            input_type: fixture.input_type,
+            position: transform.translation(),
+        })
+    }
+
+    let values = sequence_tree.get_values_recursive(&fixture_info);
+
+    assert_eq!(values.len(), fixture_info.len());
+
+    for ((mut fixture, _transform), value) in fixture_query.iter_mut().zip(values) {
+        fixture.pending_value = Some(value);
+    }
+}
+
+pub struct ColorFixturesPlugin;
+
+impl Plugin for ColorFixturesPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(FixedUpdate, apply_color_fixture_pending_values);
+    }
+}
+
+#[derive(Debug, Default, Component)]
+#[require(Fixture)]
+pub struct ColorFixture {
+    pub color: Color,
+}
+
+pub fn apply_color_fixture_pending_values(
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut fixture_query: Query<(&Fixture, &mut ColorFixture, &MeshMaterial2d<ColorMaterial>)>,
+) {
+    for (fixture, mut color_fixture, mesh_material) in fixture_query.iter_mut() {
+        let Some(pending_value) = fixture.pending_value else {
+            continue;
+        };
+
+        match pending_value {
+            FixtureInput::Color(color) => {
+                color_fixture.color = color;
+            }
+            FixtureInput::Vec3(_vec3) => {
+                panic!("color fixture expected FixtureInput::Color, received FixtureInput::Vec3");
+            }
+            FixtureInput::Combined(color, _vec3) => {
+                color_fixture.color = color;
+            }
+        }
+
+        let material = materials.get_mut(mesh_material).unwrap();
+        material.color = color_fixture.color;
+    }
+}
+
+pub fn add_data_to_buffer(
+    mut connections: ResMut<ArtNetConnections>,
+    query: Query<(&ArtNetNode, &ColorFixture)>,
+) {
+    for (node, color_fixture) in &mut query.iter() {
+        if !connections.connection_exists(&node.ip, node.port, node.universe) {
+            let connection = ArtNetConnection::new(&node.ip, node.port, node.universe);
+            if let Some(connection) = connection {
+                connections.add_connection(connection);
+            } else {
+                continue;
+            }
+        }
+
+        let connection = connections.get_connection_mut(&node.ip, node.port, node.universe);
+        let color = color_fixture.color;
+        let srgba = color.to_srgba();
+
+        if let Some(connection) = connection {
+            connection
+                .data_buffer
+                .set_channel(node.channels[0], (srgba.red * 255.0) as u8);
+            connection
+                .data_buffer
+                .set_channel(node.channels[1], (srgba.green * 255.0) as u8);
+            connection
+                .data_buffer
+                .set_channel(node.channels[2], (srgba.blue * 255.0) as u8);
         }
     }
 }

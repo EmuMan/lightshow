@@ -12,6 +12,16 @@ use crate::{
 use bevy::prelude::*;
 use derive_more::From;
 
+pub struct SequenceTreePlugin;
+
+impl Plugin for SequenceTreePlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<SequenceTree>()
+            .add_systems(FixedUpdate, update_sequence_tree)
+            .add_observer(clear_sequence_tree);
+    }
+}
+
 // ActiveSequence -> many ActiveTrack nodes
 #[derive(Debug)]
 pub struct ActiveSequence {
