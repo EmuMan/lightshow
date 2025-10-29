@@ -1,13 +1,16 @@
 use crate::{
+    fixtures::{FixtureInput, FixtureInputVec, FixtureType},
     simple_store::{SimpleHandle, SimpleStore},
     timeline::{
-        effects::{Effect, EffectInfo, EffectLike},
+        effects::{ColorEffectLike, Effect, EffectInfo},
         playback::PlaybackInformation,
         sequences::{PrimarySequence, Sequence},
         tracks::{Clip, ClipsExt, TimeSegment, Track, TrackContents},
     },
+    util::blending::colors::ColorBlendingMode,
 };
 use bevy::prelude::*;
+use derive_more::From;
 
 // ActiveSequence -> many ActiveTrack nodes
 #[derive(Debug)]
@@ -30,6 +33,8 @@ impl ActiveSequence {
 // ActiveSequenceTrack -> nothing
 #[derive(Debug)]
 pub struct ActiveEffectTrack {
+    color_blending_mode: ColorBlendingMode,
+    factor: f32,
     local_time: f64,
     original: SimpleHandle<Effect>,
     current_info: EffectInfo,
@@ -38,6 +43,8 @@ pub struct ActiveEffectTrack {
 // ActiveSequenceTrack -> potentially one ActiveSequence node
 #[derive(Debug)]
 pub struct ActiveSequenceTrack {
+    color_blending_mode: ColorBlendingMode,
+    factor: f32,
     local_time: f64,
     child: Option<(TimeSegment, ActiveSequence)>,
 }
@@ -48,35 +55,20 @@ pub struct ActiveTriggerTrack {
     // TODO: implement trigger tracks
 }
 
-#[derive(Debug)]
+#[derive(Debug, From)]
 pub enum ActiveTrack {
     ActiveEffectTrack(ActiveEffectTrack),
     ActiveSequenceTrack(ActiveSequenceTrack),
     ActiveTriggerTrack(ActiveTriggerTrack),
 }
 
-impl From<ActiveEffectTrack> for ActiveTrack {
-    fn from(value: ActiveEffectTrack) -> Self {
-        Self::ActiveEffectTrack(value)
-    }
-}
-
-impl From<ActiveSequenceTrack> for ActiveTrack {
-    fn from(value: ActiveSequenceTrack) -> Self {
-        Self::ActiveSequenceTrack(value)
-    }
-}
-
-impl From<ActiveTriggerTrack> for ActiveTrack {
-    fn from(value: ActiveTriggerTrack) -> Self {
-        Self::ActiveTriggerTrack(value)
-    }
-}
-
 impl ActiveTrack {
     fn from_track(track: &Track, effect_store: &SimpleStore<Effect>) -> Self {
         match &track.contents {
             TrackContents::EffectTrack { effect_handle } => ActiveEffectTrack {
+                color_blending_mode: track.info.color_blending_mode,
+                // TODO: align types
+                factor: track.info.opacity as f32,
                 local_time: 0.0, // will be set later down the line
                 original: *effect_handle,
                 current_info: effect_store
@@ -87,6 +79,9 @@ impl ActiveTrack {
             }
             .into(),
             TrackContents::SequenceTrack { clips } => ActiveSequenceTrack {
+                color_blending_mode: track.info.color_blending_mode,
+                // TODO: align types
+                factor: track.info.opacity as f32,
                 local_time: 0.0,
                 child: None, // will be set later down the line
             }
@@ -145,7 +140,9 @@ impl SequenceTree {
     pub fn clear(&mut self) {
         self.primary_node = None;
     }
+}
 
+impl SequenceTree {
     pub fn update_recursive(
         &mut self,
         sequence_store: &SimpleStore<Sequence>,
@@ -281,6 +278,108 @@ impl SequenceTree {
             }
             // no further checks needed
             None => current_active_track.child = None,
+        }
+    }
+}
+
+pub struct FixtureInfo {
+    pub groups: Vec<u32>,
+    pub input_type: FixtureType,
+    pub position: Vec3,
+}
+
+trait FixtureInfoVec {
+    fn get_default_inputs(&self) -> Vec<FixtureInput>;
+}
+
+impl FixtureInfoVec for &[FixtureInfo] {
+    fn get_default_inputs(&self) -> Vec<FixtureInput> {
+        self.iter()
+            .map(|fixture_info| fixture_info.input_type.get_default_input())
+            .collect()
+    }
+}
+
+impl SequenceTree {
+    pub fn get_values_recursive(&self, fixtures: &[FixtureInfo]) -> Vec<FixtureInput> {
+        // can be ignored if there is no set primary node
+        if let Some(primary_node) = &self.primary_node {
+            SequenceTree::get_values_recursive_sequence(primary_node, fixtures)
+        } else {
+            fixtures.get_default_inputs()
+        }
+    }
+
+    fn get_values_recursive_sequence(
+        current_active_sequence: &ActiveSequence,
+        fixtures: &[FixtureInfo],
+    ) -> Vec<FixtureInput> {
+        let mut final_inputs = fixtures.get_default_inputs();
+        for active_track in &current_active_sequence.children {
+            match active_track {
+                ActiveTrack::ActiveEffectTrack(active_effect_track) => {
+                    let new_values = SequenceTree::get_values_recursive_effect_track(
+                        active_effect_track,
+                        fixtures,
+                    );
+                    (&mut final_inputs).merge_all(
+                        &new_values,
+                        active_effect_track.factor,
+                        active_effect_track.color_blending_mode,
+                    );
+                }
+                ActiveTrack::ActiveSequenceTrack(active_sequence_track) => {
+                    let new_values = SequenceTree::get_values_recursive_sequence_track(
+                        active_sequence_track,
+                        fixtures,
+                    );
+                    (&mut final_inputs).merge_all(
+                        &new_values,
+                        active_sequence_track.factor,
+                        active_sequence_track.color_blending_mode,
+                    );
+                }
+                ActiveTrack::ActiveTriggerTrack(active_trigger_track) => {}
+            }
+        }
+        final_inputs
+    }
+
+    fn get_values_recursive_effect_track(
+        current_active_track: &ActiveEffectTrack,
+        fixtures: &[FixtureInfo],
+    ) -> Vec<FixtureInput> {
+        let mut final_inputs: Vec<FixtureInput> = Vec::new();
+
+        for fixture in fixtures {
+            // Because FixtureInput supports merging single values into combined values,
+            // we don't have to worry about that here!!!! this is so cool!!!!
+            match &current_active_track.current_info {
+                EffectInfo::ColorEffectInfo(color_effect) => {
+                    let output = color_effect.get_value(fixture.position);
+                    final_inputs.push(output.into());
+                }
+                EffectInfo::Vec3EffectInfo(vec3_effect) => {
+                    // TODO: once vec3 effects are fixed replace this
+                    let output = Vec3::ZERO;
+                    final_inputs.push(output.into());
+                }
+            }
+        }
+
+        final_inputs
+        // No need to recurse!
+    }
+
+    fn get_values_recursive_sequence_track(
+        current_active_track: &ActiveSequenceTrack,
+        fixtures: &[FixtureInfo],
+    ) -> Vec<FixtureInput> {
+        match &current_active_track.child {
+            Some((_time_segment, active_sequence)) => {
+                SequenceTree::get_values_recursive_sequence(active_sequence, fixtures)
+            }
+            None => fixtures.get_default_inputs(),
         }
     }
 }

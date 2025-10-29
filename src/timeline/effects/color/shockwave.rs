@@ -10,8 +10,8 @@ pub struct ColorShockwaveEffect {
     pub tail: f32,
 }
 
-impl EffectLike for ColorShockwaveEffect {
-    fn get_value(&self, position: Vec3) -> EffectOutputValue {
+impl ColorEffectLike for ColorShockwaveEffect {
+    fn get_value(&self, position: Vec3) -> Color {
         let distance = self.center.distance(position);
         get_shockwave_color_value(
             &self.color,
@@ -21,7 +21,6 @@ impl EffectLike for ColorShockwaveEffect {
             self.head,
             self.tail,
         )
-        .into()
     }
 
     fn update(&mut self, keyframes: &Keyframes, current_time: f64) {

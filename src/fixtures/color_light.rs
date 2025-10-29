@@ -2,7 +2,6 @@ use bevy::prelude::*;
 
 use crate::fixtures::*;
 use crate::network::*;
-use crate::util::blending::{blend_colors, BlendingMode};
 
 pub fn spawn_color_light(
     commands: &mut Commands,
@@ -21,24 +20,12 @@ pub fn spawn_color_light(
             radius,
             color_queue: Vec::new(),
         },
-        Fixture { groups },
+        Fixture {
+            groups,
+            input_type: FixtureType::Color,
+        },
         artnet.unwrap_or_default(),
     ));
-}
-
-pub fn apply_color_light_color_queues(
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    mut lights_query: Query<(&MeshMaterial2d<ColorMaterial>, &mut ColorLight)>,
-) {
-    for (material, mut light) in &mut lights_query {
-        let mut new_color = Color::BLACK;
-        for color in &light.color_queue {
-            new_color = blend_colors(&new_color, color, 1.0, BlendingMode::Add);
-        }
-        let new_material = materials.get_mut(material).unwrap();
-        new_material.color = new_color;
-        light.color_queue.clear();
-    }
 }
 
 pub fn add_data_to_buffer(

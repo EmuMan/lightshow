@@ -7,6 +7,7 @@ use crate::{
     network::*,
     simple_store::*,
     timeline::{effects::*, keyframes::*, sequences::*, tracks::*},
+    util::blending::colors::ColorBlendingMode,
 };
 
 pub fn pulse_test_startup(
@@ -80,12 +81,12 @@ pub fn pulse_test_startup(
 
     let effect_handle = effect_store.add(Effect {
         groups: vec![0],
-        info: EffectInfo::ColorShockwaveEffect(effect_info),
+        info: ColorEffectInfo::ColorShockwaveEffect(effect_info).into(),
         keyframes,
     });
 
     let track_info = TrackInfo {
-        blending_mode: BlendingMode::ADD,
+        color_blending_mode: ColorBlendingMode::Add,
         opacity: 1.0,
     };
 

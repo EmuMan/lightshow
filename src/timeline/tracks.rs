@@ -2,7 +2,8 @@ use bevy::prelude::*;
 
 use crate::{
     simple_store::SimpleHandle,
-    timeline::{effects::Effect, keyframes::Keyframe, sequences::Sequence},
+    timeline::{effects::Effect, sequences::Sequence},
+    util::blending::colors::ColorBlendingMode,
 };
 
 #[derive(Debug)]
@@ -13,7 +14,7 @@ pub struct Track {
 
 #[derive(Debug)]
 pub struct TrackInfo {
-    pub blending_mode: BlendingMode,
+    pub color_blending_mode: ColorBlendingMode,
     pub opacity: f64,
 }
 
@@ -70,14 +71,6 @@ impl TimeSegment {
             start_offset,
         }
     }
-}
-
-#[derive(Default, Debug)]
-pub enum BlendingMode {
-    #[default]
-    ADD,
-    SUBTRACT,
-    MULTIPLY,
 }
 
 #[derive(Debug)]
