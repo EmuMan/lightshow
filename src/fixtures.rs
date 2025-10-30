@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, sprite_render::AlphaMode2d};
 use derive_more::From;
 
 use crate::{
@@ -173,7 +173,14 @@ pub fn apply_color_fixture_pending_values(
         }
 
         let material = materials.get_mut(mesh_material).unwrap();
-        material.color = color_fixture.color;
+        // alpha just means the LED is off, not that it becomes transparent.
+        let with_alpha = blend_colors(
+            &Color::BLACK,
+            &color_fixture.color,
+            color_fixture.color.alpha(),
+            ColorBlendingMode::Mix,
+        );
+        material.color = with_alpha;
     }
 }
 

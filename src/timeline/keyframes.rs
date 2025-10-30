@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-#[derive(Component, Debug)]
+#[derive(Component, Debug, Default)]
 pub struct Keyframes {
     pub keyframes: Vec<Keyframe>,
 }

@@ -10,7 +10,12 @@ impl ColorEffectLike for ColorFillEffect {
         self.color
     }
 
-    fn update(&mut self, keyframes: &Keyframes, current_time: f64) {
+    fn update(
+        &mut self,
+        keyframes: &Keyframes,
+        current_time: f64,
+        _common_info: &EffectUpdateCommonInfo,
+    ) {
         self.color = get_color_value(&keyframes.keyframes, "color", current_time, &self.color);
     }
 

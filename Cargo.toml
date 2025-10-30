@@ -6,12 +6,17 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+apodize = "1.0.0"
 artnet_protocol = "0.4.3"
 bevy = { version = "0.17", features = ["dynamic_linking"] }
 bevy_egui = "0.37.1"
+cpal = "0.16.0"
 derive_more = { version = "2.0.1", features = ["from"] }
 enum_dispatch = "0.3.13"
 midir = "0.10.1"
+num-complex = "0.4.6"
+realfft = "3.5.0"
+ringbuf = "0.4.8"
 
 # Enable a small amount of optimization in debug mode
 [profile.dev]

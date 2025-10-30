@@ -23,7 +23,12 @@ impl ColorEffectLike for ColorShockwaveEffect {
         )
     }
 
-    fn update(&mut self, keyframes: &Keyframes, current_time: f64) {
+    fn update(
+        &mut self,
+        keyframes: &Keyframes,
+        current_time: f64,
+        _common_info: &EffectUpdateCommonInfo,
+    ) {
         self.color = get_color_value(&keyframes.keyframes, "color", current_time, &self.color);
         self.center = get_vec3_value(&keyframes.keyframes, "center", current_time, &self.center);
         self.radius = get_float_value(&keyframes.keyframes, "radius", current_time, &self.radius);

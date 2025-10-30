@@ -14,7 +14,7 @@ use crate::{
     util::blending::colors::ColorBlendingMode,
 };
 
-pub fn pulse_test_startup(
+pub fn frequency_cascade_test_startup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
@@ -24,6 +24,19 @@ pub fn pulse_test_startup(
     mut effect_store: ResMut<SimpleStore<Effect>>,
 ) {
     active_socket.socket = Some(UdpSocket::bind(("0.0.0.0", 6454)).unwrap());
+
+    let fft_config = FftConfig {
+        sample_rate: 44100,
+        window_size: 512,
+        hop_size: 256,
+    };
+
+    let (audio_capture, heap_consumer) = AudioCapture::default().unwrap();
+
+    let fft_processor = FftProcessor::new(fft_config, heap_consumer);
+
+    commands.insert_resource(audio_capture);
+    commands.insert_resource(fft_processor);
 
     for i in 0..150 {
         color_light::spawn_color_light(
@@ -57,36 +70,21 @@ pub fn pulse_test_startup(
         );
     }
 
-    let keyframes = Keyframes {
-        keyframes: vec![
-            Keyframe {
-                time: 0.,
-                interpolation: InterpolationType::LINEAR,
-                key: "radius".to_string(),
-                value: KeyframeValue::FloatKeyframe(0.),
-            },
-            Keyframe {
-                time: 3.,
-                interpolation: InterpolationType::LINEAR,
-                key: "radius".to_string(),
-                value: KeyframeValue::FloatKeyframe(300.),
-            },
+    let effect_info = color::frequency_cascade_effect::ColorFrequencyCascadeEffect::new(
+        vec![
+            (0.2, Color::linear_rgb(1.0, 0.2, 0.0)),
+            (0.4, Color::linear_rgb(0.0, 1.0, 0.0)),
+            (0.7, Color::linear_rgb(1.0, 0.0, 1.0)),
         ],
-    };
-
-    let effect_info = color::shockwave::ColorShockwaveEffect {
-        color: Color::WHITE,
-        center: Vec3::ZERO,
-        radius: 0.,
-        flat: 10.,
-        head: 30.,
-        tail: 30.,
-    };
+        Vec3::new(0.0, 40.0, 0.0),
+        16,
+        0.05,
+    );
 
     let effect_handle = effect_store.add(Effect {
         groups: vec![0],
-        info: ColorEffectInfo::ColorShockwaveEffect(effect_info).into(),
-        keyframes,
+        info: ColorEffectInfo::ColorFrequencyCascadeEffect(effect_info).into(),
+        keyframes: Keyframes::default(),
     });
 
     let track_info = TrackInfo {

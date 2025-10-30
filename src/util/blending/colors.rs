@@ -10,7 +10,7 @@ pub enum ColorBlendingMode {
 }
 
 fn lerp(f1: f32, f2: f32, t: f32) -> f32 {
-    f1 - (f1 + f2) * t
+    f1 + (f2 - f1) * t
 }
 
 pub fn blend_colors(
@@ -91,4 +91,32 @@ fn multiply_colors(color_1: &Color, color_2: &Color, factor: f32) -> Color {
         ),
     )
     .into()
+}
+
+/// Interpolates between several color bands from a normalized value
+pub fn interpolate_color_bands(color_bands: &[(f32, Color)], value: f32) -> Color {
+    let mut band_1_idx: Option<usize> = None;
+    let mut band_2_idx: Option<usize> = None;
+
+    for (i, (band, _)) in color_bands.iter().enumerate() {
+        if value > *band {
+            // TODO: clone every time... sad...
+            band_1_idx = Some(i);
+        } else {
+            band_2_idx = Some(i);
+            break;
+        }
+    }
+
+    match (band_1_idx, band_2_idx) {
+        (Some(band_1_idx), Some(band_2_idx)) => {
+            let band_1 = color_bands[band_1_idx];
+            let band_2 = color_bands[band_2_idx];
+            let normalized = (value - band_1.0) / (band_2.0 - band_1.0);
+            mix_colors(&band_1.1, &band_2.1, normalized)
+        }
+        (Some(band_1_idx), None) => color_bands[band_1_idx].1.clone(),
+        (None, Some(band_2_idx)) => color_bands[band_2_idx].1.clone(),
+        (None, None) => Color::NONE,
+    }
 }

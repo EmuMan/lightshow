@@ -8,7 +8,10 @@ impl Plugin for PlaybackPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PlaybackInformation>()
             .add_systems(Update, increment_playback_time)
-            .add_systems(Startup, tests::single_pulse::pulse_test_startup);
+            .add_systems(
+                Startup,
+                tests::frequency_cascade::frequency_cascade_test_startup,
+            );
     }
 }
 

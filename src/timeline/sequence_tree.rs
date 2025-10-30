@@ -1,8 +1,9 @@
 use crate::{
+    audio::processing::fft::RecentFftData,
     fixtures::{FixtureInput, FixtureInputVec, FixtureType},
     simple_store::{SimpleHandle, SimpleStore},
     timeline::{
-        effects::{ColorEffectLike, Effect, EffectInfo},
+        effects::{ColorEffectLike, Effect, EffectInfo, EffectUpdateCommonInfo},
         playback::PlaybackInformation,
         sequences::{PrimarySequence, Sequence},
         tracks::{Clip, ClipsExt, TimeSegment, Track, TrackContents},
@@ -159,6 +160,7 @@ impl SequenceTree {
         effect_store: &SimpleStore<Effect>,
         primary_sequence_handle: SimpleHandle<Sequence>,
         primary_sequence_time: f64,
+        common_info: &EffectUpdateCommonInfo,
     ) {
         SequenceTree::update_recursive_sequence(
             sequence_store,
@@ -168,6 +170,7 @@ impl SequenceTree {
             self.primary_node
                 .get_or_insert(ActiveSequence::from_sequence(primary_sequence_handle)),
             primary_sequence_time,
+            common_info,
         )
     }
 
@@ -177,6 +180,7 @@ impl SequenceTree {
         current_sequence_handle: SimpleHandle<Sequence>,
         current_active_sequence: &mut ActiveSequence,
         current_time: f64,
+        common_info: &EffectUpdateCommonInfo,
     ) {
         let Some(current_sequence) = sequence_store.get(current_sequence_handle) else {
             panic!("encountered sequence that does not exist while updating sequence tree");
@@ -205,6 +209,7 @@ impl SequenceTree {
                         *effect_handle,
                         active_child_element.as_active_effect_track(),
                         current_time,
+                        common_info,
                     );
                 }
                 TrackContents::SequenceTrack { clips } => {
@@ -214,6 +219,7 @@ impl SequenceTree {
                         clips,
                         active_child_element.as_active_sequence_track(),
                         current_time,
+                        common_info,
                     );
                 }
                 TrackContents::TriggerTrack { sequence_handle } => {
@@ -228,6 +234,7 @@ impl SequenceTree {
         current_effect_handle: SimpleHandle<Effect>,
         current_active_track: &mut ActiveEffectTrack,
         current_time: f64,
+        common_info: &EffectUpdateCommonInfo,
     ) {
         let current_effect = effect_store
             .get(current_effect_handle)
@@ -235,9 +242,11 @@ impl SequenceTree {
 
         current_active_track.local_time = current_time;
 
-        current_active_track
-            .current_info
-            .update(&current_effect.keyframes, current_time);
+        current_active_track.current_info.update(
+            &current_effect.keyframes,
+            current_time,
+            common_info,
+        );
 
         // No need to recurse!
     }
@@ -248,6 +257,7 @@ impl SequenceTree {
         clips: &Vec<Clip>,
         current_active_track: &mut ActiveSequenceTrack,
         current_time: f64,
+        common_info: &EffectUpdateCommonInfo,
     ) {
         current_active_track.local_time = current_time;
 
@@ -284,6 +294,7 @@ impl SequenceTree {
                     current_clip.sequence_handle,
                     next_active_sequence,
                     current_time - time_segment.start_time + time_segment.start_offset,
+                    common_info,
                 );
             }
             // no further checks needed
@@ -402,14 +413,21 @@ fn clear_sequence_tree(_reset: On<ClearSequenceTree>, mut sequence_tree: ResMut<
 }
 
 fn update_sequence_tree(
+    time: Res<Time>,
     sequence_store: Res<SimpleStore<Sequence>>,
     effect_store: Res<SimpleStore<Effect>>,
     primary_sequence: Res<PrimarySequence>,
     mut sequence_tree: ResMut<SequenceTree>,
     playback_info: Res<PlaybackInformation>,
+    recent_fft_data: Res<RecentFftData>,
 ) {
     let Some(primary_sequence_handle) = primary_sequence.0 else {
         return;
+    };
+
+    let common_info = EffectUpdateCommonInfo {
+        recent_fft_data: &recent_fft_data,
+        global_time: time.elapsed_secs_f64(),
     };
 
     sequence_tree.update_recursive(
@@ -417,5 +435,6 @@ fn update_sequence_tree(
         &effect_store,
         primary_sequence_handle,
         playback_info.current_time,
+        &common_info,
     );
 }
