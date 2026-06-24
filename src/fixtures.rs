@@ -1,189 +1,160 @@
-use bevy::{prelude::*, sprite_render::AlphaMode2d};
-use derive_more::From;
+use bevy::prelude::*;
 
 use crate::{
     network::{ArtNetConnection, ArtNetConnections, ArtNetNode},
-    timeline::sequence_tree::{FixtureInfo, SequenceTree},
+    timeline::sequence_tree::SequenceTree,
     util::blending::colors::{ColorBlendingMode, blend_colors},
 };
 
 pub mod color_light;
 
+/// Bevy plugin for fixtures.
 pub struct FixturesPlugin;
 
 impl Plugin for FixturesPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(ColorFixturesPlugin)
-            .add_systems(FixedUpdate, update_fixtures)
-            .add_systems(FixedUpdate, apply_color_fixture_pending_values)
-            .add_systems(FixedUpdate, add_data_to_buffer);
+        app.add_systems(FixedUpdate, update_fixtures)
+            .add_systems(FixedUpdate, add_data_to_buffer)
+            .add_systems(Update, apply_color_fixture_material);
     }
 }
 
+/// Bevy component that represents a light or other fixture within the scene.
+/// Holds common information including what groups it is a part of.
+///
+/// TODO: Add fixture series eventually.
 #[derive(Component, Debug, Default)]
 #[require(Transform, Mesh2d, MeshMaterial2d<ColorMaterial>)]
 pub struct Fixture {
     pub groups: Vec<u32>,
-    pub input_type: FixtureType,
-    pub pending_value: Option<FixtureInput>,
 }
 
 impl Fixture {
-    pub fn new(groups: Vec<u32>, input_type: FixtureType) -> Self {
-        Self {
-            groups,
-            input_type,
-            pending_value: None,
-        }
+    pub fn new(groups: Vec<u32>) -> Self {
+        Self { groups }
     }
 }
 
-#[derive(Debug, Default, Clone, Copy)]
-pub enum FixtureType {
-    Color,
-    Vec3,
-    #[default]
-    Combined,
-}
-
-impl FixtureType {
-    pub fn get_default_input(&self) -> FixtureInput {
-        match self {
-            FixtureType::Color => Color::NONE.into(),
-            FixtureType::Vec3 => Vec3::ZERO.into(),
-            FixtureType::Combined => (Color::NONE, Vec3::ZERO).into(),
-        }
-    }
-}
-
-#[derive(Debug, From, Clone, Copy)]
-pub enum FixtureInput {
-    Color(Color),
-    Vec3(Vec3),
-    Combined(Color, Vec3),
-}
-
-impl FixtureInput {
-    pub fn merge(
-        &mut self,
-        other: &FixtureInput,
-        factor: f32,
-        color_blending_mode: ColorBlendingMode,
-    ) {
-        match (self, other) {
-            (FixtureInput::Color(self_color), FixtureInput::Color(other_color)) => {
-                *self_color = blend_colors(self_color, other_color, factor, color_blending_mode);
-            }
-            (FixtureInput::Vec3(self_vec3), FixtureInput::Vec3(other_vec3)) => {
-                // TODO: implement blending for vec3s
-            }
-            (
-                FixtureInput::Combined(self_color, self_vec3),
-                FixtureInput::Combined(other_color, other_vec3),
-            ) => {
-                // TODO: implement blending for combineds
-            }
-            // It is okay if the other input is just one of the two if self is combined.
-            // It will just get merged with its respective type.
-            (FixtureInput::Combined(self_color, _self_vec3), FixtureInput::Color(other_color)) => {
-                *self_color = blend_colors(self_color, other_color, factor, color_blending_mode);
-            }
-            (FixtureInput::Combined(_self_color, self_vec3), FixtureInput::Vec3(other_vec3)) => {
-                // TODO: Implement blending for vec3s
-            }
-            _ => panic!("attempted to merge incompatible fixture input types"),
-        }
-    }
-}
-
-pub trait FixtureInputVec {
-    fn merge_all(self, other: &[FixtureInput], factor: f32, color_blending_mode: ColorBlendingMode);
-}
-
-impl FixtureInputVec for &mut [FixtureInput] {
-    fn merge_all(
-        self,
-        other: &[FixtureInput],
-        factor: f32,
-        color_blending_mode: ColorBlendingMode,
-    ) {
-        assert_eq!(self.len(), other.len());
-        for (self_fixture, other_fixture) in self.iter_mut().zip(other) {
-            self_fixture.merge(other_fixture, factor, color_blending_mode);
-        }
-    }
-}
-
-pub fn update_fixtures(
-    sequence_tree: Res<SequenceTree>,
-    mut fixture_query: Query<(&mut Fixture, &GlobalTransform)>,
-) {
-    let mut fixture_info: Vec<FixtureInfo> = Vec::new();
-
-    for (fixture, transform) in fixture_query.iter_mut() {
-        fixture_info.push(FixtureInfo {
-            groups: fixture.groups.clone(),
-            input_type: fixture.input_type,
-            position: transform.translation(),
-        })
-    }
-
-    let values = sequence_tree.get_values_recursive(&fixture_info);
-
-    assert_eq!(values.len(), fixture_info.len());
-
-    for ((mut fixture, _transform), value) in fixture_query.iter_mut().zip(values) {
-        fixture.pending_value = Some(value);
-    }
-}
-
-pub struct ColorFixturesPlugin;
-
-impl Plugin for ColorFixturesPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(FixedUpdate, apply_color_fixture_pending_values);
-    }
-}
-
+/// Bevy component that is attached to any fixtures that use a color.
 #[derive(Debug, Default, Component)]
 #[require(Fixture)]
 pub struct ColorFixture {
     pub color: Color,
 }
 
-pub fn apply_color_fixture_pending_values(
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    mut fixture_query: Query<(&Fixture, &mut ColorFixture, &MeshMaterial2d<ColorMaterial>)>,
-) {
-    for (fixture, mut color_fixture, mesh_material) in fixture_query.iter_mut() {
-        let Some(pending_value) = fixture.pending_value else {
-            continue;
-        };
+/// Bevy component that is attached to any fixtures that use a vec3.
+#[derive(Debug, Default, Component)]
+#[require(Fixture)]
+pub struct Vec3Fixture {
+    pub vec3: Vec3,
+}
 
-        match pending_value {
-            FixtureInput::Color(color) => {
-                color_fixture.color = color;
-            }
-            FixtureInput::Vec3(_vec3) => {
-                panic!("color fixture expected FixtureInput::Color, received FixtureInput::Vec3");
-            }
-            FixtureInput::Combined(color, _vec3) => {
-                color_fixture.color = color;
-            }
+/// Simple data struct used to group important request information together
+/// when pulling data from the scene tree.
+#[derive(Debug, Clone)]
+pub struct FixtureRequest {
+    pub groups: Vec<u32>,
+    pub position: Vec3,
+    pub has_color: bool,
+    pub has_vec3: bool,
+}
+
+impl FixtureRequest {
+    pub fn default_response(&self) -> FixtureResponse {
+        FixtureResponse {
+            color: if self.has_color {
+                Some(Color::BLACK.with_alpha(0.0))
+            } else {
+                None
+            },
+            vec3: if self.has_vec3 {
+                Some(Vec3::ZERO)
+            } else {
+                None
+            },
         }
-
-        let material = materials.get_mut(mesh_material).unwrap();
-        // alpha just means the LED is off, not that it becomes transparent.
-        let with_alpha = blend_colors(
-            &Color::BLACK,
-            &color_fixture.color,
-            color_fixture.color.alpha(),
-            ColorBlendingMode::Mix,
-        );
-        material.color = with_alpha;
     }
 }
 
+/// Simple data struct used to return requested information from the scene
+/// tree.
+#[derive(Debug, Clone, Default)]
+pub struct FixtureResponse {
+    pub color: Option<Color>,
+    pub vec3: Option<Vec3>,
+}
+
+impl FixtureResponse {
+    pub fn color_only(color: Color) -> Self {
+        Self {
+            color: Some(color),
+            vec3: None,
+        }
+    }
+
+    pub fn vec3_only(vec3: Vec3) -> Self {
+        Self {
+            color: None,
+            vec3: Some(vec3),
+        }
+    }
+
+    pub fn merge_in_place(
+        &mut self,
+        other: &FixtureResponse,
+        factor: f32,
+        blending_mode: ColorBlendingMode,
+    ) {
+        if self.color.is_some() || other.color.is_some() {
+            let self_col = self.color.unwrap_or_else(|| Color::BLACK.with_alpha(0.0));
+            let other_col = other.color.unwrap_or_else(|| Color::BLACK.with_alpha(0.0));
+            self.color = Some(blend_colors(&self_col, &other_col, factor, blending_mode));
+        };
+        // TODO: implement Vec3s
+    }
+}
+
+/// Bevy system that updates all fixture information, pulling from the sequence
+/// tree. Expects the sequence tree to be up to date.
+pub fn update_fixtures(
+    sequence_tree: Res<SequenceTree>,
+    mut fixture_query: Query<(
+        &mut Fixture,
+        Option<&mut ColorFixture>,
+        Option<&mut Vec3Fixture>,
+        &GlobalTransform,
+    )>,
+) {
+    let mut fixture_reqs: Vec<FixtureRequest> = Vec::new();
+
+    for (fixture, color_fixture, vec3_fixture, transform) in fixture_query.iter_mut() {
+        fixture_reqs.push(FixtureRequest {
+            groups: fixture.groups.clone(),
+            position: transform.translation(),
+            has_color: color_fixture.is_some(),
+            has_vec3: vec3_fixture.is_some(),
+        })
+    }
+
+    let values = sequence_tree.get_values_recursive(&fixture_reqs);
+
+    assert_eq!(values.len(), fixture_reqs.len());
+
+    for ((_, color_fixture, vec3_fixture, _), value) in fixture_query.iter_mut().zip(values) {
+        if let (Some(mut color_fixture), Some(color_value)) = (color_fixture, value.color) {
+            println!("Setting color!");
+            color_fixture.color = color_value;
+        }
+        if let (Some(mut vec3_fixture), Some(vec3_value)) = (vec3_fixture, value.vec3) {
+            vec3_fixture.vec3 = vec3_value;
+        }
+    }
+}
+
+/// Bevy system that adds fixture color information to the ArtNet buffer.
+///
+/// TODO: Support other types of information! All necessary data should be sent
+/// as one package, not chunked up into color, rotation, etc.
 pub fn add_data_to_buffer(
     mut connections: ResMut<ArtNetConnections>,
     query: Query<(&ArtNetNode, &ColorFixture)>,
@@ -205,13 +176,32 @@ pub fn add_data_to_buffer(
         if let Some(connection) = connection {
             connection
                 .data_buffer
-                .set_channel(node.channels[0], (srgba.red * 255.0) as u8);
+                .set_channel(node.channels[0], (srgba.red * srgba.alpha * 255.0) as u8);
             connection
                 .data_buffer
-                .set_channel(node.channels[1], (srgba.green * 255.0) as u8);
+                .set_channel(node.channels[1], (srgba.green * srgba.alpha * 255.0) as u8);
             connection
                 .data_buffer
-                .set_channel(node.channels[2], (srgba.blue * 255.0) as u8);
+                .set_channel(node.channels[2], (srgba.blue * srgba.alpha * 255.0) as u8);
         }
+    }
+}
+
+/// Bevy system that updates the materials of fixtures that have color fixture
+/// components in the visual representation.
+pub fn apply_color_fixture_material(
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    query: Query<(&ColorFixture, &MeshMaterial2d<ColorMaterial>)>,
+) {
+    for (color_fixture, mesh_material) in query.iter() {
+        let material = materials.get_mut(mesh_material).unwrap();
+        // alpha just means the LED is off, not that it becomes transparent.
+        let with_alpha = blend_colors(
+            &Color::BLACK,
+            &color_fixture.color,
+            color_fixture.color.alpha(),
+            ColorBlendingMode::Mix,
+        );
+        material.color = with_alpha;
     }
 }

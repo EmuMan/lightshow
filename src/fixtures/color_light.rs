@@ -16,7 +16,7 @@ pub fn spawn_color_light(
         Mesh2d(meshes.add(Circle::new(radius))),
         MeshMaterial2d(materials.add(Color::BLACK)),
         transform,
-        Fixture::new(groups, FixtureType::Color),
+        Fixture::new(groups),
         ColorFixture::default(),
         artnet.unwrap_or_default(),
     ));

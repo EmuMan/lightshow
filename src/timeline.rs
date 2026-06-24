@@ -11,8 +11,7 @@ pub struct TimelinePlugin;
 
 impl Plugin for TimelinePlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(effects::EffectsPlugin)
-            .add_plugins(playback::PlaybackPlugin)
+        app.add_plugins(playback::PlaybackPlugin)
             .add_plugins(sequences::SequencesPlugin)
             .add_plugins(sequence_tree::SequenceTreePlugin);
     }

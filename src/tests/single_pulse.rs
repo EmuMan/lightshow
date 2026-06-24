@@ -3,10 +3,6 @@ use std::net::UdpSocket;
 use bevy::prelude::*;
 
 use crate::{
-    audio::{
-        capture::AudioCapture,
-        processing::fft::{FftConfig, FftProcessor},
-    },
     fixtures::*,
     network::*,
     simple_store::*,
@@ -21,7 +17,6 @@ pub fn pulse_test_startup(
     mut active_socket: ResMut<ActiveSocket>,
     mut primary_sequence: ResMut<PrimarySequence>,
     mut sequence_store: ResMut<SimpleStore<Sequence>>,
-    mut effect_store: ResMut<SimpleStore<Effect>>,
 ) {
     active_socket.socket = Some(UdpSocket::bind(("0.0.0.0", 6454)).unwrap());
 
@@ -57,22 +52,20 @@ pub fn pulse_test_startup(
         );
     }
 
-    let keyframes = Keyframes {
-        keyframes: vec![
-            Keyframe {
-                time: 0.,
-                interpolation: InterpolationType::LINEAR,
-                key: "radius".to_string(),
-                value: KeyframeValue::FloatKeyframe(0.),
-            },
-            Keyframe {
-                time: 3.,
-                interpolation: InterpolationType::LINEAR,
-                key: "radius".to_string(),
-                value: KeyframeValue::FloatKeyframe(300.),
-            },
-        ],
-    };
+    let effect_keyframes = Keyframes::new(vec![
+        Keyframe {
+            time: 0.,
+            interpolation: InterpolationType::LINEAR,
+            key: "radius".to_string(),
+            value: KeyframeValue::FloatKeyframe(0.),
+        },
+        Keyframe {
+            time: 3.,
+            interpolation: InterpolationType::LINEAR,
+            key: "radius".to_string(),
+            value: KeyframeValue::FloatKeyframe(300.),
+        },
+    ]);
 
     let effect_info = color::shockwave::ColorShockwaveEffect {
         color: Color::WHITE,
@@ -83,18 +76,16 @@ pub fn pulse_test_startup(
         tail: 30.,
     };
 
-    let effect_handle = effect_store.add(Effect {
-        groups: vec![0],
-        info: ColorEffectInfo::ColorShockwaveEffect(effect_info).into(),
-        keyframes,
-    });
-
     let track_info = TrackInfo {
         color_blending_mode: ColorBlendingMode::Add,
-        opacity: 1.0,
+        factor: 1.0,
+        track_keyframes: Keyframes::default(),
     };
 
-    let track_contents = TrackContents::EffectTrack { effect_handle };
+    let track_contents = TrackContents::EffectTrack {
+        effect_init_info: ColorEffectInfo::ColorShockwaveEffect(effect_info).into(),
+        effect_keyframes,
+    };
 
     let track = Track {
         info: track_info,

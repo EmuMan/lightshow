@@ -16,7 +16,7 @@ impl ColorEffectLike for ColorFillEffect {
         current_time: f64,
         _common_info: &EffectUpdateCommonInfo,
     ) {
-        self.color = get_color_value(&keyframes.keyframes, "color", current_time, &self.color);
+        self.color = keyframes.get_color_value("color", current_time, &self.color);
     }
 
     fn insert_component(&self, entity_commands: &mut EntityCommands) {

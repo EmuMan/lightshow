@@ -29,7 +29,7 @@ Tracks:
   - Contains a TrackInfo
   - Contains a TrackContents
 - TrackInfo (struct)
-  - Contains various information about a track (blending mode, opacity, etc.)
+  - Contains various information about a track (blending mode, factor, etc.)
 - TrackContents (enum)
   - EffectTrack
     - Contains a SimpleHandle to an EffectInfo

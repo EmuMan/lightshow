@@ -1,9 +1,10 @@
 use crate::{
     audio::processing::fft::RecentFftData,
-    fixtures::{FixtureInput, FixtureInputVec, FixtureType},
+    fixtures::{FixtureRequest, FixtureResponse},
     simple_store::{SimpleHandle, SimpleStore},
     timeline::{
-        effects::{ColorEffectLike, Effect, EffectInfo, EffectUpdateCommonInfo},
+        effects::{ColorEffectLike, EffectInfo, EffectUpdateCommonInfo},
+        keyframes::Keyframes,
         playback::PlaybackInformation,
         sequences::{PrimarySequence, Sequence},
         tracks::{Clip, ClipsExt, TimeSegment, Track, TrackContents},
@@ -13,6 +14,7 @@ use crate::{
 use bevy::prelude::*;
 use derive_more::From;
 
+/// Bevy plugin for the sequence tree.
 pub struct SequenceTreePlugin;
 
 impl Plugin for SequenceTreePlugin {
@@ -23,40 +25,49 @@ impl Plugin for SequenceTreePlugin {
     }
 }
 
-// ActiveSequence -> many ActiveTrack nodes
+/// An `ActiveSequence` represents a currently-playing-back sequence within
+/// the tree. Here, it simply points to many `ActiveTrack` children, which
+/// handle any actual effects or subsequences.
+///
+/// `ActiveSequence` -> many `ActiveTrack` nodes.
 #[derive(Debug)]
 pub struct ActiveSequence {
     local_time: f64,
-    original: SimpleHandle<Sequence>,
     children: Vec<ActiveTrack>,
 }
 
-impl ActiveSequence {
-    fn from_sequence(sequence_handle: SimpleHandle<Sequence>) -> Self {
+impl Default for ActiveSequence {
+    /// Creates a new `ActiveSequence`. Information will be brought in during
+    /// the next update cycle.
+    fn default() -> Self {
         Self {
             local_time: 0.0,
-            original: sequence_handle,
             children: Vec::new(),
         }
     }
 }
 
-// ActiveSequenceTrack -> nothing
+/// Represents a single active effect track, i.e. an indexed child of an active
+/// sequence that is currently being played back and defines a single effect to
+/// be rendered. These represent leaves of the sequence tree and contain only
+/// effect info. Keyframes are shared globally across all instances of the
+/// effect and are therefore passed by reference in the effect update functions
+/// to avoid recloning on every modification.
+///
+/// `ActiveSequenceTrack` -> nothing
 #[derive(Debug)]
 pub struct ActiveEffectTrack {
-    color_blending_mode: ColorBlendingMode,
-    factor: f32,
-    local_time: f64,
-    original: SimpleHandle<Effect>,
     current_info: EffectInfo,
 }
 
-// ActiveSequenceTrack -> potentially one ActiveSequence node
+/// Represents a single active sequence track, i.e. an indexed child of an
+/// active sequence that is currently being played back and defines a series of
+/// clips which reference other sequences. Holds a reference to the currently
+/// playing clip if the playback head is currently on one, otherwise `None`.
+///
+/// `ActiveSequenceTrack` -> potentially one `ActiveSequence` node
 #[derive(Debug)]
 pub struct ActiveSequenceTrack {
-    color_blending_mode: ColorBlendingMode,
-    factor: f32,
-    local_time: f64,
     child: Option<(TimeSegment, ActiveSequence)>,
 }
 
@@ -66,117 +77,160 @@ pub struct ActiveTriggerTrack {
     // TODO: implement trigger tracks
 }
 
+/// Collection of all active track content types to be included as data for
+/// active tracks (indexed children of active sequences in the sequence tree).
 #[derive(Debug, From)]
-pub enum ActiveTrack {
+pub enum ActiveTrackContents {
     ActiveEffectTrack(ActiveEffectTrack),
     ActiveSequenceTrack(ActiveSequenceTrack),
     ActiveTriggerTrack(ActiveTriggerTrack),
 }
 
-impl ActiveTrack {
-    fn from_track(track: &Track, effect_store: &SimpleStore<Effect>) -> Self {
-        match &track.contents {
-            TrackContents::EffectTrack { effect_handle } => ActiveEffectTrack {
-                color_blending_mode: track.info.color_blending_mode,
+/// Represents a single active track, i.e. an indexed child of an active
+/// sequence that is currently being played back. Contains basic track
+/// metadata, as well as any variant-specific contents of the track, such as
+/// the effect information or children, within `contents`.
+#[derive(Debug)]
+pub struct ActiveTrack {
+    color_blending_mode: ColorBlendingMode,
+    factor: f32,
+    local_time: f64,
+    contents: ActiveTrackContents,
+}
+
+impl From<&Track> for ActiveTrack {
+    /// Constructs an `ActiveTrack` from a static track playing back within a
+    /// sequence defined in the timeline.
+    fn from(value: &Track) -> Self {
+        match &value.contents {
+            TrackContents::EffectTrack {
+                effect_init_info, ..
+            } => Self {
+                color_blending_mode: value.info.color_blending_mode,
                 // TODO: align types
-                factor: track.info.opacity as f32,
+                factor: value.info.factor,
                 local_time: 0.0, // will be set later down the line
-                original: *effect_handle,
-                current_info: effect_store
-                    .get(*effect_handle)
-                    .expect("attempted to get invalid effect while constructing EffectActiveTrack")
-                    .info
-                    .clone(),
-            }
-            .into(),
-            TrackContents::SequenceTrack { clips } => ActiveSequenceTrack {
-                color_blending_mode: track.info.color_blending_mode,
+                contents: ActiveEffectTrack {
+                    // Since an effect can be instantiated several times, data
+                    // has to be cloned each time.
+                    current_info: effect_init_info.clone(),
+                }
+                .into(),
+            },
+            TrackContents::SequenceTrack { .. } => Self {
+                color_blending_mode: value.info.color_blending_mode,
                 // TODO: align types
-                factor: track.info.opacity as f32,
+                factor: value.info.factor,
                 local_time: 0.0,
-                child: None, // will be set later down the line
-            }
-            .into(),
-            TrackContents::TriggerTrack { sequence_handle } => ActiveTriggerTrack {}.into(), // TODO: implement trigger tracks
+                contents: ActiveSequenceTrack {
+                    child: None, // will be set later down the line
+                }
+                .into(),
+            },
+            TrackContents::TriggerTrack { .. } => Self {
+                color_blending_mode: value.info.color_blending_mode,
+                // TODO: align types
+                factor: value.info.factor,
+                local_time: 0.0,
+                // TODO: implement trigger tracks
+                contents: ActiveTriggerTrack {}.into(),
+            },
         }
     }
+}
 
+impl ActiveTrack {
     fn as_active_effect_track(&mut self) -> &mut ActiveEffectTrack {
-        match self {
-            ActiveTrack::ActiveEffectTrack(active_effect_track) => active_effect_track,
-            ActiveTrack::ActiveSequenceTrack(_) => {
+        match &mut self.contents {
+            ActiveTrackContents::ActiveEffectTrack(active_effect_track) => active_effect_track,
+            ActiveTrackContents::ActiveSequenceTrack(_) => {
                 panic!("attempted to unwrap ActiveSequenceTrack as ActiveEffectTrack")
             }
-            ActiveTrack::ActiveTriggerTrack(_) => {
+            ActiveTrackContents::ActiveTriggerTrack(_) => {
                 panic!("attempted to unwrap ActiveTriggerTrack as ActiveEffectTrack")
             }
         }
     }
 
     fn as_active_sequence_track(&mut self) -> &mut ActiveSequenceTrack {
-        match self {
-            ActiveTrack::ActiveEffectTrack(_) => {
+        match &mut self.contents {
+            ActiveTrackContents::ActiveEffectTrack(_) => {
                 panic!("attempted to unwrap ActiveEffectTrack as ActiveSequenceTrack")
             }
-            ActiveTrack::ActiveSequenceTrack(active_sequence_track) => active_sequence_track,
-            ActiveTrack::ActiveTriggerTrack(_) => {
+            ActiveTrackContents::ActiveSequenceTrack(active_sequence_track) => {
+                active_sequence_track
+            }
+            ActiveTrackContents::ActiveTriggerTrack(_) => {
                 panic!("attempted to unwrap ActiveTriggerTrack as ActiveSequenceTrack")
             }
         }
     }
 
     fn as_active_trigger_track(&mut self) -> &mut ActiveTriggerTrack {
-        match self {
-            ActiveTrack::ActiveEffectTrack(_) => {
+        match &mut self.contents {
+            ActiveTrackContents::ActiveEffectTrack(_) => {
                 panic!("attempted to unwrap ActiveEffectTrack as ActiveTriggerTrack")
             }
-            ActiveTrack::ActiveSequenceTrack(_) => {
+            ActiveTrackContents::ActiveSequenceTrack(_) => {
                 panic!("attempted to unwrap ActiveSequenceTrack as ActiveTriggerTrack")
             }
-            ActiveTrack::ActiveTriggerTrack(active_trigger_track) => active_trigger_track,
+            ActiveTrackContents::ActiveTriggerTrack(active_trigger_track) => active_trigger_track,
         }
     }
 }
 
+/// The almighty sequence tree, which drives how the effects and sub-sequences
+/// of the current active sequence are built out into the actual, concrete
+/// effects being played back and rendered out to the fixtures. If a track,
+/// effect, or sequence of any sort is currently a factor in playback, it will
+/// be included in this tree in the form of its `Active...` variant.
+///
+/// Stored as a global Bevy resource.
 #[derive(Resource, Debug, Default)]
 pub struct SequenceTree {
     primary_node: Option<ActiveSequence>,
 }
 
 impl SequenceTree {
+    /// Constructs a new, empty `SequenceTree`.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Clears out the sequence tree. By setting the primary node to `None`, a
+    /// full regeneration is forced during the next update cycle. Should be
+    /// called whenever changes are made to the order or major contents of any
+    /// sequence to avoid stale data from causing issues.
     pub fn clear(&mut self) {
         self.primary_node = None;
     }
-}
 
-impl SequenceTree {
+    /// Updates the sequence store based on the primary sequence open in the
+    /// program. Creates and removes branches as necessary, as well as updating
+    /// any active effects within the tree. This should be called every upate
+    /// cycle to keep the active tree up to date in playback so it can be
+    /// accurately sampled by any fixtures.
     pub fn update_recursive(
         &mut self,
         sequence_store: &SimpleStore<Sequence>,
-        effect_store: &SimpleStore<Effect>,
         primary_sequence_handle: SimpleHandle<Sequence>,
         primary_sequence_time: f64,
         common_info: &EffectUpdateCommonInfo,
     ) {
         SequenceTree::update_recursive_sequence(
             sequence_store,
-            effect_store,
             primary_sequence_handle,
             // create the primary node if it does not exist
-            self.primary_node
-                .get_or_insert(ActiveSequence::from_sequence(primary_sequence_handle)),
+            self.primary_node.get_or_insert(ActiveSequence::default()),
             primary_sequence_time,
             common_info,
         )
     }
 
+    /// Helper function for `SequenceTree::update_recursive`. Recursively
+    /// updates the sequence subtree and effects within an active sequence.
     fn update_recursive_sequence(
         sequence_store: &SimpleStore<Sequence>,
-        effect_store: &SimpleStore<Effect>,
         current_sequence_handle: SimpleHandle<Sequence>,
         current_active_sequence: &mut ActiveSequence,
         current_time: f64,
@@ -194,7 +248,7 @@ impl SequenceTree {
             if needs_initialization {
                 current_active_sequence
                     .children
-                    .push(ActiveTrack::from_track(track, effect_store));
+                    .push(ActiveTrack::from(track));
             }
 
             let active_child_element = current_active_sequence
@@ -202,20 +256,23 @@ impl SequenceTree {
                 .get_mut(track_i)
                 .expect("sequence and active sequence track counts don't match");
 
+            active_child_element.local_time = current_time;
+            // TODO: Update factor using keyframes. Probably through a helper within `ActiveTrack`.
+
             match &track.contents {
-                TrackContents::EffectTrack { effect_handle } => {
+                TrackContents::EffectTrack {
+                    effect_keyframes, ..
+                } => {
                     SequenceTree::update_recursive_effect_track(
-                        effect_store,
-                        *effect_handle,
                         active_child_element.as_active_effect_track(),
                         current_time,
                         common_info,
+                        effect_keyframes,
                     );
                 }
                 TrackContents::SequenceTrack { clips } => {
                     SequenceTree::update_recursive_sequence_track(
                         sequence_store,
-                        effect_store,
                         clips,
                         active_child_element.as_active_sequence_track(),
                         current_time,
@@ -229,38 +286,33 @@ impl SequenceTree {
         }
     }
 
+    /// Helper function for `SequenceTree::update_recursive`. Applies updates
+    /// to an active effect track within the sequence tree, as dictated by the
+    /// specific effect implementation. Does not recurse.
     fn update_recursive_effect_track(
-        effect_store: &SimpleStore<Effect>,
-        current_effect_handle: SimpleHandle<Effect>,
         current_active_track: &mut ActiveEffectTrack,
         current_time: f64,
         common_info: &EffectUpdateCommonInfo,
+        effect_keyframes: &Keyframes,
     ) {
-        let current_effect = effect_store
-            .get(current_effect_handle)
-            .expect("encountered effect that does not exist while updating sequence tree");
-
-        current_active_track.local_time = current_time;
-
-        current_active_track.current_info.update(
-            &current_effect.keyframes,
-            current_time,
-            common_info,
-        );
+        // Let the effect implementation itself decide how to update.
+        current_active_track
+            .current_info
+            .update(effect_keyframes, current_time, common_info);
 
         // No need to recurse!
     }
 
+    /// Helper function for `SequenceTree::update_recursive`. Recursively
+    /// updates the sequence subtree and effects within an active sequence
+    /// track, if the playhead is currently sitting over a clip.
     fn update_recursive_sequence_track(
         sequence_store: &SimpleStore<Sequence>,
-        effect_store: &SimpleStore<Effect>,
         clips: &Vec<Clip>,
         current_active_track: &mut ActiveSequenceTrack,
         current_time: f64,
         common_info: &EffectUpdateCommonInfo,
     ) {
-        current_active_track.local_time = current_time;
-
         let current_clip = clips.find_current(current_time);
         match current_clip {
             Some(current_clip) => {
@@ -270,16 +322,13 @@ impl SequenceTree {
                         // track, so only the time segment needs to be checked
                         if *time_segment != current_clip.time_segment {
                             // there is already a clip but it is the wrong one, so swap it out
-                            *active_sequence =
-                                ActiveSequence::from_sequence(current_clip.sequence_handle);
+                            *active_sequence = ActiveSequence::default();
                         }
                     }
                     None => {
                         // there was no clip, so make a new one
-                        current_active_track.child = Some((
-                            current_clip.time_segment,
-                            ActiveSequence::from_sequence(current_clip.sequence_handle),
-                        ));
+                        current_active_track.child =
+                            Some((current_clip.time_segment, ActiveSequence::default()));
                     }
                 }
 
@@ -290,7 +339,6 @@ impl SequenceTree {
                     .expect("ActiveSequenceTrack child somehow does not exist after creation");
                 SequenceTree::update_recursive_sequence(
                     sequence_store,
-                    effect_store,
                     current_clip.sequence_handle,
                     next_active_sequence,
                     current_time - time_segment.start_time + time_segment.start_offset,
@@ -301,90 +349,97 @@ impl SequenceTree {
             None => current_active_track.child = None,
         }
     }
-}
 
-pub struct FixtureInfo {
-    pub groups: Vec<u32>,
-    pub input_type: FixtureType,
-    pub position: Vec3,
-}
-
-trait FixtureInfoVec {
-    fn get_default_inputs(&self) -> Vec<FixtureInput>;
-}
-
-impl FixtureInfoVec for &[FixtureInfo] {
-    fn get_default_inputs(&self) -> Vec<FixtureInput> {
-        self.iter()
-            .map(|fixture_info| fixture_info.input_type.get_default_input())
-            .collect()
-    }
-}
-
-impl SequenceTree {
-    pub fn get_values_recursive(&self, fixtures: &[FixtureInfo]) -> Vec<FixtureInput> {
+    /// Recursively retreives a set of values for fixtures. Batches the whole
+    /// set together for performance improvement. Does not ask for unrelated
+    /// information if a fixture does not need it. Assumes that the sequence
+    /// tree is up to date (`SequenceTree::update_recursive` has been called).
+    /// The number of responses returned will equal the number of requests
+    /// passed in.
+    pub fn get_values_recursive(&self, fixtures: &[FixtureRequest]) -> Vec<FixtureResponse> {
         // can be ignored if there is no set primary node
         if let Some(primary_node) = &self.primary_node {
             SequenceTree::get_values_recursive_sequence(primary_node, fixtures)
         } else {
-            fixtures.get_default_inputs()
+            fixtures
+                .iter()
+                .map(FixtureRequest::default_response)
+                .collect()
         }
     }
 
+    /// Helper function for `SequenceTree::get_values_recursive` that recurses
+    /// over all tracks within a sequence, collects the data they provide for
+    /// each request, and merges them together according to factor and blend
+    /// mode.
     fn get_values_recursive_sequence(
         current_active_sequence: &ActiveSequence,
-        fixtures: &[FixtureInfo],
-    ) -> Vec<FixtureInput> {
-        let mut final_inputs = fixtures.get_default_inputs();
+        fixtures: &[FixtureRequest],
+    ) -> Vec<FixtureResponse> {
+        let mut final_inputs: Vec<FixtureResponse> = fixtures
+            .iter()
+            .map(FixtureRequest::default_response)
+            .collect();
+
         for active_track in &current_active_sequence.children {
-            match active_track {
-                ActiveTrack::ActiveEffectTrack(active_effect_track) => {
-                    let new_values = SequenceTree::get_values_recursive_effect_track(
-                        active_effect_track,
-                        fixtures,
-                    );
-                    (&mut final_inputs).merge_all(
-                        &new_values,
-                        active_effect_track.factor,
-                        active_effect_track.color_blending_mode,
-                    );
+            let new_values = match &active_track.contents {
+                ActiveTrackContents::ActiveEffectTrack(active_effect_track) => {
+                    SequenceTree::get_values_recursive_effect_track(active_effect_track, fixtures)
                 }
-                ActiveTrack::ActiveSequenceTrack(active_sequence_track) => {
-                    let new_values = SequenceTree::get_values_recursive_sequence_track(
+                ActiveTrackContents::ActiveSequenceTrack(active_sequence_track) => {
+                    SequenceTree::get_values_recursive_sequence_track(
                         active_sequence_track,
                         fixtures,
-                    );
-                    (&mut final_inputs).merge_all(
-                        &new_values,
-                        active_sequence_track.factor,
-                        active_sequence_track.color_blending_mode,
-                    );
+                    )
                 }
-                ActiveTrack::ActiveTriggerTrack(active_trigger_track) => {}
+                ActiveTrackContents::ActiveTriggerTrack(active_trigger_track) => {
+                    // TODO: implement trigger tracks
+                    fixtures
+                        .iter()
+                        .map(FixtureRequest::default_response)
+                        .collect()
+                }
+            };
+            for (existing_val, new_val) in final_inputs.iter_mut().zip(new_values.iter()) {
+                existing_val.merge_in_place(
+                    &new_val,
+                    active_track.factor,
+                    active_track.color_blending_mode,
+                );
             }
         }
+
         final_inputs
     }
 
+    /// Helper function for `SequenceTree::get_values_recursive` that retrieves
+    /// the values for a set of requests from an effect track, based on what
+    /// information the individual requests need.
     fn get_values_recursive_effect_track(
         current_active_track: &ActiveEffectTrack,
-        fixtures: &[FixtureInfo],
-    ) -> Vec<FixtureInput> {
-        let mut final_inputs: Vec<FixtureInput> = Vec::new();
+        fixtures: &[FixtureRequest],
+    ) -> Vec<FixtureResponse> {
+        let mut final_inputs: Vec<FixtureResponse> = Vec::new();
 
-        for fixture in fixtures {
-            // Because FixtureInput supports merging single values into combined values,
-            // we don't have to worry about that here!!!! this is so cool!!!!
-            match &current_active_track.current_info {
-                EffectInfo::ColorEffectInfo(color_effect) => {
-                    let output = color_effect.get_value(fixture.position);
-                    final_inputs.push(output.into());
+        match &current_active_track.current_info {
+            EffectInfo::ColorEffectInfo(color_effect) => {
+                for fixture in fixtures {
+                    if fixture.has_color {
+                        let output = color_effect.get_value(fixture.position);
+                        final_inputs.push(FixtureResponse::color_only(output));
+                    } else {
+                        final_inputs.push(FixtureResponse::default())
+                    }
                 }
-                EffectInfo::Vec3EffectInfo(vec3_effect) => {
-                    // TODO: once vec3 effects are fixed replace this
-                    let output = Vec3::ZERO;
-                    final_inputs.push(output.into());
-                }
+            }
+            EffectInfo::Vec3EffectInfo(vec3_effect) => {
+                // TODO: Implement vec3
+                // for fixture in fixtures {
+                //     if fixture.has_vec3 {
+                //         let output = vec3_effect.get_value(fixture.position);
+                //         final_inputs.push(FixtureResponse::vec3_only(output));
+                //     }
+                // }
             }
         }
 
@@ -392,30 +447,41 @@ impl SequenceTree {
         // No need to recurse!
     }
 
+    /// Helper function for `SequenceTree::get_values_recursive` that retrieves
+    /// the value from inside a sequence track if there is currently an active
+    /// clip playing inside of it, default otherwise.
     fn get_values_recursive_sequence_track(
         current_active_track: &ActiveSequenceTrack,
-        fixtures: &[FixtureInfo],
-    ) -> Vec<FixtureInput> {
+        fixtures: &[FixtureRequest],
+    ) -> Vec<FixtureResponse> {
         match &current_active_track.child {
             Some((_time_segment, active_sequence)) => {
                 SequenceTree::get_values_recursive_sequence(active_sequence, fixtures)
             }
-            None => fixtures.get_default_inputs(),
+            None => fixtures
+                .iter()
+                .map(FixtureRequest::default_response)
+                .collect(),
         }
     }
 }
 
+/// Bevy event that clears the current sequence tree.
 #[derive(Event)]
 pub struct ClearSequenceTree {}
 
+/// Bevy observer that listens for `ClearSequenceTree` events and clears the
+/// sequence tree upon receiving one.
 fn clear_sequence_tree(_reset: On<ClearSequenceTree>, mut sequence_tree: ResMut<SequenceTree>) {
     sequence_tree.clear();
 }
 
+/// Bevy system that updates the sequence tree, keeping both structure and
+/// effect values up to date. See `SequenceTree::update_recursive` for more
+/// information; this is basically just a wrapper around that.
 fn update_sequence_tree(
     time: Res<Time>,
     sequence_store: Res<SimpleStore<Sequence>>,
-    effect_store: Res<SimpleStore<Effect>>,
     primary_sequence: Res<PrimarySequence>,
     mut sequence_tree: ResMut<SequenceTree>,
     playback_info: Res<PlaybackInformation>,
@@ -432,7 +498,6 @@ fn update_sequence_tree(
 
     sequence_tree.update_recursive(
         &sequence_store,
-        &effect_store,
         primary_sequence_handle,
         playback_info.current_time,
         &common_info,

@@ -21,7 +21,6 @@ pub fn frequency_cascade_test_startup(
     mut active_socket: ResMut<ActiveSocket>,
     mut primary_sequence: ResMut<PrimarySequence>,
     mut sequence_store: ResMut<SimpleStore<Sequence>>,
-    mut effect_store: ResMut<SimpleStore<Effect>>,
 ) {
     active_socket.socket = Some(UdpSocket::bind(("0.0.0.0", 6454)).unwrap());
 
@@ -81,18 +80,16 @@ pub fn frequency_cascade_test_startup(
         0.05,
     );
 
-    let effect_handle = effect_store.add(Effect {
-        groups: vec![0],
-        info: ColorEffectInfo::ColorFrequencyCascadeEffect(effect_info).into(),
-        keyframes: Keyframes::default(),
-    });
-
     let track_info = TrackInfo {
         color_blending_mode: ColorBlendingMode::Add,
-        opacity: 1.0,
+        factor: 1.0,
+        track_keyframes: Keyframes::default(),
     };
 
-    let track_contents = TrackContents::EffectTrack { effect_handle };
+    let track_contents = TrackContents::EffectTrack {
+        effect_init_info: ColorEffectInfo::ColorFrequencyCascadeEffect(effect_info).into(),
+        effect_keyframes: Keyframes::default(),
+    };
 
     let track = Track {
         info: track_info,

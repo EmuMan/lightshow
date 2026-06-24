@@ -29,12 +29,12 @@ impl ColorEffectLike for ColorShockwaveEffect {
         current_time: f64,
         _common_info: &EffectUpdateCommonInfo,
     ) {
-        self.color = get_color_value(&keyframes.keyframes, "color", current_time, &self.color);
-        self.center = get_vec3_value(&keyframes.keyframes, "center", current_time, &self.center);
-        self.radius = get_float_value(&keyframes.keyframes, "radius", current_time, &self.radius);
-        self.flat = get_float_value(&keyframes.keyframes, "flat", current_time, &self.flat);
-        self.head = get_float_value(&keyframes.keyframes, "head", current_time, &self.head);
-        self.tail = get_float_value(&keyframes.keyframes, "tail", current_time, &self.tail);
+        self.color = keyframes.get_color_value("color", current_time, &self.color);
+        self.center = keyframes.get_vec3_value("center", current_time, &self.center);
+        self.radius = keyframes.get_float_value("radius", current_time, &self.radius);
+        self.flat = keyframes.get_float_value("flat", current_time, &self.flat);
+        self.head = keyframes.get_float_value("head", current_time, &self.head);
+        self.tail = keyframes.get_float_value("tail", current_time, &self.tail);
     }
 
     fn insert_component(&self, entity_commands: &mut EntityCommands) {

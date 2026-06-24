@@ -2,19 +2,24 @@ use bevy::prelude::*;
 
 use crate::{simple_store::SimpleStore, tests, timeline::sequences::*};
 
+/// Bevy plugin for playback.
 pub struct PlaybackPlugin;
 
 impl Plugin for PlaybackPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PlaybackInformation>()
             .add_systems(Update, increment_playback_time)
-            .add_systems(
-                Startup,
-                tests::frequency_cascade::frequency_cascade_test_startup,
-            );
+            .add_systems(Startup, tests::single_pulse::pulse_test_startup);
     }
 }
 
+/// Bevy resource that holds information about the current state of playback on
+/// the primary sequence, including current playback head time, whether or not
+/// playback is currently in progress, and the beats per minute and beats per bar
+/// to define gridlines.
+///
+/// TODO: Separate BPM into some separate measure. Maybe make sequences either
+/// time-bound or BPM bound? Really not sure how to best do this.
 #[derive(Resource, Debug)]
 pub struct PlaybackInformation {
     pub current_time: f64,
@@ -34,6 +39,8 @@ impl Default for PlaybackInformation {
     }
 }
 
+/// Increments current playback time when playback is currently in progress.
+/// Loops back to `0` when playback reaches the end of the primary sequence.
 pub fn increment_playback_time(
     time: Res<Time>,
     mut playback: ResMut<PlaybackInformation>,
