@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 
 use crate::{
-    network::{ArtNetConnection, ArtNetConnections, ArtNetNode},
+    network::{ArtNetBuffers, ArtNetDataPointer},
     timeline::sequence_tree::SequenceTree,
-    util::blending::colors::{ColorBlendingMode, blend_colors},
+    util::blending::{BlendingMode, colors::blend_colors, pan_tilt::blend_pan_tilt},
 };
 
 pub mod color_light;
@@ -14,7 +14,8 @@ pub struct FixturesPlugin;
 impl Plugin for FixturesPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(FixedUpdate, update_fixtures)
-            .add_systems(FixedUpdate, add_data_to_buffer)
+            .add_systems(FixedUpdate, add_color_data_to_buffer)
+            .add_systems(FixedUpdate, add_pan_tilt_data_to_buffer)
             .add_systems(Update, apply_color_fixture_material);
     }
 }
@@ -36,17 +37,69 @@ impl Fixture {
 }
 
 /// Bevy component that is attached to any fixtures that use a color.
-#[derive(Debug, Default, Component)]
+#[derive(Component, Debug)]
 #[require(Fixture)]
 pub struct ColorFixture {
     pub color: Color,
+    pub encoding: RgbEncoding,
+    pub red_channel: u8,
+    pub green_channel: u8,
+    pub blue_channel: u8,
+    pub white_channel: Option<u8>,
 }
 
-/// Bevy component that is attached to any fixtures that use a vec3.
-#[derive(Debug, Default, Component)]
+impl Default for ColorFixture {
+    fn default() -> Self {
+        Self {
+            color: Color::BLACK.with_alpha(0.0),
+            encoding: RgbEncoding::default(),
+            red_channel: 0,
+            green_channel: 1,
+            blue_channel: 2,
+            white_channel: None,
+        }
+    }
+}
+
+/// Enum that represents the encoding of the color data.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum RgbEncoding {
+    #[default]
+    Linear,
+    Srgb,
+}
+
+/// Simple data struct that represents the pan and tilt angles of a fixture.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PanTilt {
+    pub pan: f32,
+    pub tilt: f32,
+}
+
+impl Default for PanTilt {
+    fn default() -> Self {
+        Self {
+            pan: 0.0,
+            tilt: 0.0,
+        }
+    }
+}
+
+impl PanTilt {
+    pub fn new(pan: f32, tilt: f32) -> Self {
+        Self { pan, tilt }
+    }
+}
+
+/// Bevy component that is attached to any fixtures that can pan/tilt. Both
+/// angles are in degrees, with 0 being the default position.
+#[derive(Component, Debug, Default)]
 #[require(Fixture)]
-pub struct Vec3Fixture {
-    pub vec3: Vec3,
+pub struct PanTiltFixture {
+    pub pan: f32,
+    pub tilt: f32,
+    pub pan_range: (f32, f32),
+    pub tilt_range: (f32, f32),
 }
 
 /// Simple data struct used to group important request information together
@@ -56,7 +109,7 @@ pub struct FixtureRequest {
     pub groups: Vec<u32>,
     pub position: Vec3,
     pub has_color: bool,
-    pub has_vec3: bool,
+    pub has_pan_tilt: bool,
 }
 
 impl FixtureRequest {
@@ -67,8 +120,8 @@ impl FixtureRequest {
             } else {
                 None
             },
-            vec3: if self.has_vec3 {
-                Some(Vec3::ZERO)
+            pan_tilt: if self.has_pan_tilt {
+                Some(PanTilt::default())
             } else {
                 None
             },
@@ -81,21 +134,21 @@ impl FixtureRequest {
 #[derive(Debug, Clone, Default)]
 pub struct FixtureResponse {
     pub color: Option<Color>,
-    pub vec3: Option<Vec3>,
+    pub pan_tilt: Option<PanTilt>,
 }
 
 impl FixtureResponse {
     pub fn color_only(color: Color) -> Self {
         Self {
             color: Some(color),
-            vec3: None,
+            pan_tilt: None,
         }
     }
 
-    pub fn vec3_only(vec3: Vec3) -> Self {
+    pub fn pan_tilt_only(pan_tilt: PanTilt) -> Self {
         Self {
             color: None,
-            vec3: Some(vec3),
+            pan_tilt: Some(pan_tilt),
         }
     }
 
@@ -103,14 +156,18 @@ impl FixtureResponse {
         &mut self,
         other: &FixtureResponse,
         factor: f32,
-        blending_mode: ColorBlendingMode,
+        blending_mode: BlendingMode,
     ) {
         if self.color.is_some() || other.color.is_some() {
             let self_col = self.color.unwrap_or_else(|| Color::BLACK.with_alpha(0.0));
             let other_col = other.color.unwrap_or_else(|| Color::BLACK.with_alpha(0.0));
-            self.color = Some(blend_colors(&self_col, &other_col, factor, blending_mode));
+            self.color = Some(blend_colors(self_col, other_col, factor, blending_mode));
         };
-        // TODO: implement Vec3s
+        if self.pan_tilt.is_some() || other.pan_tilt.is_some() {
+            let self_pt = self.pan_tilt.unwrap_or_default();
+            let other_pt = other.pan_tilt.unwrap_or_default();
+            self.pan_tilt = Some(blend_pan_tilt(self_pt, other_pt, factor, blending_mode));
+        };
     }
 }
 
@@ -121,18 +178,18 @@ pub fn update_fixtures(
     mut fixture_query: Query<(
         &mut Fixture,
         Option<&mut ColorFixture>,
-        Option<&mut Vec3Fixture>,
+        Option<&mut PanTiltFixture>,
         &GlobalTransform,
     )>,
 ) {
     let mut fixture_reqs: Vec<FixtureRequest> = Vec::new();
 
-    for (fixture, color_fixture, vec3_fixture, transform) in fixture_query.iter_mut() {
+    for (fixture, color_fixture, pan_tilt_fixture, transform) in fixture_query.iter_mut() {
         fixture_reqs.push(FixtureRequest {
             groups: fixture.groups.clone(),
             position: transform.translation(),
             has_color: color_fixture.is_some(),
-            has_vec3: vec3_fixture.is_some(),
+            has_pan_tilt: pan_tilt_fixture.is_some(),
         })
     }
 
@@ -140,49 +197,95 @@ pub fn update_fixtures(
 
     assert_eq!(values.len(), fixture_reqs.len());
 
-    for ((_, color_fixture, vec3_fixture, _), value) in fixture_query.iter_mut().zip(values) {
+    for ((_, color_fixture, pan_tilt_fixture, _), value) in fixture_query.iter_mut().zip(values) {
         if let (Some(mut color_fixture), Some(color_value)) = (color_fixture, value.color) {
-            println!("Setting color!");
             color_fixture.color = color_value;
         }
-        if let (Some(mut vec3_fixture), Some(vec3_value)) = (vec3_fixture, value.vec3) {
-            vec3_fixture.vec3 = vec3_value;
+        if let (Some(mut pan_tilt_fixture), Some(pan_tilt_value)) =
+            (pan_tilt_fixture, value.pan_tilt)
+        {
+            pan_tilt_fixture.pan = pan_tilt_value.pan;
+            pan_tilt_fixture.tilt = pan_tilt_value.tilt;
         }
     }
 }
 
-/// Bevy system that adds fixture color information to the ArtNet buffer.
-///
-/// TODO: Support other types of information! All necessary data should be sent
-/// as one package, not chunked up into color, rotation, etc.
-pub fn add_data_to_buffer(
-    mut connections: ResMut<ArtNetConnections>,
-    query: Query<(&ArtNetNode, &ColorFixture)>,
+/// Bevy system that adds RGB fixture information to the ArtNet buffer.
+pub fn add_color_data_to_buffer(
+    mut buffers: ResMut<ArtNetBuffers>,
+    color_query: Query<(&ArtNetDataPointer, &ColorFixture)>,
 ) {
-    for (node, color_fixture) in &mut query.iter() {
-        if !connections.connection_exists(&node.ip, node.port, node.universe) {
-            let connection = ArtNetConnection::new(&node.ip, node.port, node.universe);
-            if let Some(connection) = connection {
-                connections.add_connection(connection);
-            } else {
-                continue;
+    for (pointer, fixture) in color_query.iter() {
+        let (mut r, mut g, mut b) = match fixture.encoding {
+            RgbEncoding::Linear => {
+                let c = fixture.color.to_linear();
+                (c.red, c.green, c.blue)
             }
+            RgbEncoding::Srgb => {
+                let c = fixture.color.to_srgba();
+                (c.red, c.green, c.blue)
+            }
+        };
+
+        let w = fixture.white_channel.map(|_| {
+            let w = r.min(g).min(b);
+            r -= w;
+            g -= w;
+            b -= w;
+            w
+        });
+
+        let result: Result<(), String> = (|| {
+            buffers.write(
+                pointer.offset_by(fixture.red_channel as u16)?,
+                (r * 255.0).clamp(0.0, 255.0) as u8,
+            )?;
+            buffers.write(
+                pointer.offset_by(fixture.green_channel as u16)?,
+                (g * 255.0).clamp(0.0, 255.0) as u8,
+            )?;
+            buffers.write(
+                pointer.offset_by(fixture.blue_channel as u16)?,
+                (b * 255.0).clamp(0.0, 255.0) as u8,
+            )?;
+            if let (Some(white_offset), Some(w)) = (fixture.white_channel, w) {
+                buffers.write(
+                    pointer.offset_by(white_offset as u16)?,
+                    (w * 255.0).clamp(0.0, 255.0) as u8,
+                )?;
+            }
+            Ok(())
+        })();
+
+        if let Err(e) = result {
+            warn!("Failed to write fixture DMX data: {}", e);
         }
+    }
+}
 
-        let connection = connections.get_connection_mut(&node.ip, node.port, node.universe);
-        let color = color_fixture.color;
-        let srgba = color.to_srgba();
+/// Bevy system that adds pan/tilt fixture information to the ArtNet buffer.
+pub fn add_pan_tilt_data_to_buffer(
+    mut buffers: ResMut<ArtNetBuffers>,
+    pan_tilt_query: Query<(&ArtNetDataPointer, &PanTiltFixture)>,
+) {
+    for (pointer, fixture) in pan_tilt_query.iter() {
+        let pan = ((fixture.pan - fixture.pan_range.0)
+            / (fixture.pan_range.1 - fixture.pan_range.0)
+            * 255.0)
+            .clamp(0.0, 255.0) as u8;
+        let tilt = ((fixture.tilt - fixture.tilt_range.0)
+            / (fixture.tilt_range.1 - fixture.tilt_range.0)
+            * 255.0)
+            .clamp(0.0, 255.0) as u8;
 
-        if let Some(connection) = connection {
-            connection
-                .data_buffer
-                .set_channel(node.channels[0], (srgba.red * srgba.alpha * 255.0) as u8);
-            connection
-                .data_buffer
-                .set_channel(node.channels[1], (srgba.green * srgba.alpha * 255.0) as u8);
-            connection
-                .data_buffer
-                .set_channel(node.channels[2], (srgba.blue * srgba.alpha * 255.0) as u8);
+        let result: Result<(), String> = (|| {
+            buffers.write(pointer.offset_by(0)?, pan)?;
+            buffers.write(pointer.offset_by(1)?, tilt)?;
+            Ok(())
+        })();
+
+        if let Err(e) = result {
+            warn!("Failed to write fixture DMX data: {}", e);
         }
     }
 }
@@ -196,11 +299,12 @@ pub fn apply_color_fixture_material(
     for (color_fixture, mesh_material) in query.iter() {
         let material = materials.get_mut(mesh_material).unwrap();
         // alpha just means the LED is off, not that it becomes transparent.
+        // TODO: do this with base color, make that rgb or smth
         let with_alpha = blend_colors(
-            &Color::BLACK,
-            &color_fixture.color,
+            Color::BLACK,
+            color_fixture.color,
             color_fixture.color.alpha(),
-            ColorBlendingMode::Mix,
+            BlendingMode::Mix,
         );
         material.color = with_alpha;
     }

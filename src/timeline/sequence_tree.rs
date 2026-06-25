@@ -3,13 +3,13 @@ use crate::{
     fixtures::{FixtureRequest, FixtureResponse},
     simple_store::{SimpleHandle, SimpleStore},
     timeline::{
-        effects::{ColorEffectLike, EffectInfo, EffectUpdateCommonInfo},
+        effects::{ColorEffectLike, EffectInfo, EffectUpdateCommonInfo, PanTiltEffectLike},
         keyframes::Keyframes,
         playback::PlaybackInformation,
         sequences::{PrimarySequence, Sequence},
         tracks::{Clip, ClipsExt, TimeSegment, Track, TrackContents},
     },
-    util::blending::colors::ColorBlendingMode,
+    util::blending::BlendingMode,
 };
 use bevy::prelude::*;
 use derive_more::From;
@@ -92,7 +92,7 @@ pub enum ActiveTrackContents {
 /// the effect information or children, within `contents`.
 #[derive(Debug)]
 pub struct ActiveTrack {
-    color_blending_mode: ColorBlendingMode,
+    blending_mode: BlendingMode,
     factor: f32,
     local_time: f64,
     contents: ActiveTrackContents,
@@ -106,8 +106,7 @@ impl From<&Track> for ActiveTrack {
             TrackContents::EffectTrack {
                 effect_init_info, ..
             } => Self {
-                color_blending_mode: value.info.color_blending_mode,
-                // TODO: align types
+                blending_mode: value.info.blending_mode,
                 factor: value.info.factor,
                 local_time: 0.0, // will be set later down the line
                 contents: ActiveEffectTrack {
@@ -118,8 +117,7 @@ impl From<&Track> for ActiveTrack {
                 .into(),
             },
             TrackContents::SequenceTrack { .. } => Self {
-                color_blending_mode: value.info.color_blending_mode,
-                // TODO: align types
+                blending_mode: value.info.blending_mode,
                 factor: value.info.factor,
                 local_time: 0.0,
                 contents: ActiveSequenceTrack {
@@ -128,8 +126,7 @@ impl From<&Track> for ActiveTrack {
                 .into(),
             },
             TrackContents::TriggerTrack { .. } => Self {
-                color_blending_mode: value.info.color_blending_mode,
-                // TODO: align types
+                blending_mode: value.info.blending_mode,
                 factor: value.info.factor,
                 local_time: 0.0,
                 // TODO: implement trigger tracks
@@ -404,7 +401,7 @@ impl SequenceTree {
                 existing_val.merge_in_place(
                     &new_val,
                     active_track.factor,
-                    active_track.color_blending_mode,
+                    active_track.blending_mode,
                 );
             }
         }
@@ -432,14 +429,15 @@ impl SequenceTree {
                     }
                 }
             }
-            EffectInfo::Vec3EffectInfo(vec3_effect) => {
-                // TODO: Implement vec3
-                // for fixture in fixtures {
-                //     if fixture.has_vec3 {
-                //         let output = vec3_effect.get_value(fixture.position);
-                //         final_inputs.push(FixtureResponse::vec3_only(output));
-                //     }
-                // }
+            EffectInfo::PanTiltEffectInfo(pan_tilt_effect) => {
+                for fixture in fixtures {
+                    if fixture.has_pan_tilt {
+                        let output = pan_tilt_effect.get_value(fixture.position);
+                        final_inputs.push(FixtureResponse::pan_tilt_only(output));
+                    } else {
+                        final_inputs.push(FixtureResponse::default())
+                    }
+                }
             }
         }
 

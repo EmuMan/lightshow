@@ -11,7 +11,7 @@ use crate::{
     network::*,
     simple_store::*,
     timeline::{effects::*, keyframes::*, sequences::*, tracks::*},
-    util::blending::colors::ColorBlendingMode,
+    util::blending::BlendingMode,
 };
 
 pub fn frequency_cascade_test_startup(
@@ -22,7 +22,13 @@ pub fn frequency_cascade_test_startup(
     mut primary_sequence: ResMut<PrimarySequence>,
     mut sequence_store: ResMut<SimpleStore<Sequence>>,
 ) {
-    active_socket.socket = Some(UdpSocket::bind(("0.0.0.0", 6454)).unwrap());
+    active_socket.socket = Some({
+        let socket = UdpSocket::bind(("0.0.0.0", 6454)).unwrap();
+        socket
+            .set_broadcast(true)
+            .expect("Failed to set broadcast mode on socket");
+        socket
+    });
 
     let fft_config = FftConfig {
         sample_rate: 44100,
@@ -44,12 +50,15 @@ pub fn frequency_cascade_test_startup(
             &mut materials,
             Transform::from_translation(Vec3::new(-50., (i as f32 * 2.) as f32 - 150., 0.)),
             1.,
+            ColorFixture::default(),
             vec![0],
-            Some(ArtNetNode {
-                ip: "192.168.1.156".into(),
-                channels: vec![1 + i * 3, 0 + i * 3, 2 + i * 3],
-                ..Default::default()
-            }),
+            Some(
+                ArtNetDataPointer::new(
+                    ArtNetAddress::new(0, 0, 0).expect("ArtNetAddress should be valid"),
+                    i * 3,
+                )
+                .expect("ArtNetDataPointer should be valid"),
+            ),
         );
     }
 
@@ -60,12 +69,15 @@ pub fn frequency_cascade_test_startup(
             &mut materials,
             Transform::from_translation(Vec3::new(50., (i as f32 * 2.) as f32 - 150., 0.)),
             1.,
+            ColorFixture::default(),
             vec![0],
-            Some(ArtNetNode {
-                ip: "192.168.1.157".into(),
-                channels: vec![1 + i * 3, 0 + i * 3, 2 + i * 3],
-                ..Default::default()
-            }),
+            Some(
+                ArtNetDataPointer::new(
+                    ArtNetAddress::new(0, 0, 1).expect("ArtNetAddress should be valid"),
+                    i * 3,
+                )
+                .expect("ArtNetDataPointer should be valid"),
+            ),
         );
     }
 
@@ -81,7 +93,7 @@ pub fn frequency_cascade_test_startup(
     );
 
     let track_info = TrackInfo {
-        color_blending_mode: ColorBlendingMode::Add,
+        blending_mode: BlendingMode::Add,
         factor: 1.0,
         track_keyframes: Keyframes::default(),
     };

@@ -1,13 +1,14 @@
+use artnet_protocol::{ArtCommand, Output, PortAddress};
 use bevy::prelude::*;
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::collections::{HashMap, HashSet};
 
 pub struct NetworkPlugin;
 
 impl Plugin for NetworkPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<ArtNetConnections>()
-            .init_resource::<ActiveSocket>()
-            .add_systems(FixedUpdate, send_and_erase_buffers);
+        app.init_resource::<ActiveSocket>()
+            .init_resource::<ArtNetBuffers>()
+            .add_systems(FixedUpdate, send_and_clear_buffers);
     }
 }
 
@@ -16,97 +17,79 @@ pub struct ActiveSocket {
     pub socket: Option<std::net::UdpSocket>,
 }
 
-#[derive(Resource, Debug)]
-pub struct ArtNetConnections {
-    pub connections: Vec<ArtNetConnection>,
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ArtNetAddress {
+    pub net: u8,
+    pub subnet: u8,
+    pub universe: u8,
 }
 
-impl Default for ArtNetConnections {
-    fn default() -> Self {
-        Self {
-            connections: Vec::new(),
+impl ArtNetAddress {
+    pub fn new(net: u8, subnet: u8, universe: u8) -> Result<Self, String> {
+        if net >= 128 {
+            Err(format!(
+                "Art-Net net must be between 0 and 127 inclusive, got {}",
+                net
+            ))
+        } else if subnet >= 16 {
+            Err(format!(
+                "Art-Net subnet must be between 0 and 15 inclusive, got {}",
+                subnet
+            ))
+        } else if universe >= 16 {
+            Err(format!(
+                "Art-Net universe must be between 0 and 15 inclusive, got {}",
+                universe
+            ))
+        } else {
+            Ok(ArtNetAddress {
+                net,
+                subnet,
+                universe,
+            })
         }
     }
 }
 
-impl ArtNetConnections {
-    pub fn add_connection(&mut self, connection: ArtNetConnection) {
-        self.connections.push(connection);
-    }
-
-    pub fn get_connection(&self, ip: &str, port: u16, universe: u16) -> Option<&ArtNetConnection> {
-        self.connections.iter().find(|connection| {
-            let cur_universe: u16 = connection.universe.into();
-            connection.ip == ip && connection.port == port && cur_universe == universe
-        })
-    }
-
-    pub fn get_connection_mut(
-        &mut self,
-        ip: &str,
-        port: u16,
-        universe: u16,
-    ) -> Option<&mut ArtNetConnection> {
-        self.connections.iter_mut().find(|connection| {
-            let cur_universe: u16 = connection.universe.into();
-            connection.ip == ip && connection.port == port && cur_universe == universe
-        })
-    }
-
-    pub fn connection_exists(&self, ip: &str, port: u16, universe: u16) -> bool {
-        self.get_connection(ip, port, universe).is_some()
-    }
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ArtNetDataPointer {
+    pub address: ArtNetAddress,
+    pub offset: u16,
 }
 
-#[derive(Debug)]
-pub struct ArtNetConnection {
-    pub ip: String,
-    pub port: u16,
-    pub socket_addr: SocketAddr,
-    pub universe: artnet_protocol::PortAddress,
-    pub data_buffer: Dmx512Buffer,
-}
-
-impl Default for ArtNetConnection {
-    fn default() -> Self {
-        ArtNetConnection::new("0.0.0.0", 6454, 0).unwrap()
-    }
-}
-
-impl From<&ArtNetConnection> for artnet_protocol::Output {
-    fn from(connection: &ArtNetConnection) -> Self {
-        let buffer = &connection.data_buffer;
-        artnet_protocol::Output {
-            port_address: connection.universe,
-            data: buffer.bytes[..buffer.length].to_vec().into(),
-            ..artnet_protocol::Output::default()
+impl ArtNetDataPointer {
+    pub fn new(address: ArtNetAddress, offset: u16) -> Result<ArtNetDataPointer, String> {
+        if offset >= 512 {
+            Err(format!(
+                "Art-Net data pointer offset must be between 0 and 511 inclusive, got {}",
+                offset
+            ))
+        } else {
+            Ok(ArtNetDataPointer { address, offset })
         }
     }
-}
 
-impl ArtNetConnection {
-    pub fn new(ip: &str, port: u16, universe: u16) -> Option<Self> {
-        let socket_addr = (ip, port).to_socket_addrs().ok()?.next()?;
-        Some(Self {
-            ip: ip.into(),
-            port,
-            socket_addr,
-            universe: universe.try_into().ok()?,
-            data_buffer: Dmx512Buffer::default(),
-        })
+    pub fn offset_by(self, additional: u16) -> Result<ArtNetDataPointer, String> {
+        let new_offset = self.offset.checked_add(additional).filter(|&o| o < 512).ok_or_else(|| {
+            format!(
+                "Art-Net data pointer offset {} + {} would exceed the maximum of 511",
+                self.offset, additional
+            )
+        })?;
+        Ok(ArtNetDataPointer { offset: new_offset, ..self })
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Dmx512Buffer {
-    bytes: Vec<u8>,
+    bytes: [u8; 512],
     length: usize,
 }
 
 impl Default for Dmx512Buffer {
     fn default() -> Self {
         Self {
-            bytes: vec![0; 512],
+            bytes: [0; 512],
             length: 0,
         }
     }
@@ -114,54 +97,84 @@ impl Default for Dmx512Buffer {
 
 impl Dmx512Buffer {
     pub fn clear(&mut self) {
-        self.bytes = vec![0; 512];
+        self.bytes = [0; 512];
         self.length = 0;
     }
 
-    pub fn set_channel(&mut self, channel: u16, value: u8) {
-        let channel = channel as usize;
-        if channel < 512 {
-            self.bytes[channel] = value;
-            if channel >= self.length {
-                self.length = channel + 1;
-            }
+    pub fn write(&mut self, offset: usize, value: u8) -> Result<(), String> {
+        if offset >= 512 {
+            return Err(format!(
+                "Art-Net DMX offset must be between 0 and 511 inclusive, got {}",
+                offset
+            ));
         }
+        self.bytes[offset] = value;
+        if offset + 1 > self.length {
+            self.length = offset + 1;
+        }
+        Ok(())
     }
 }
 
-#[derive(Component)]
-pub struct ArtNetNode {
-    pub ip: String,
-    pub port: u16,
-    pub universe: u16,
-    pub channels: Vec<u16>,
+#[derive(Resource, Debug, Default)]
+pub struct ArtNetBuffers {
+    buffers: HashMap<ArtNetAddress, Dmx512Buffer>,
+    dirty: HashSet<ArtNetAddress>,
 }
 
-impl Default for ArtNetNode {
-    fn default() -> Self {
-        ArtNetNode {
-            ip: "0.0.0.0".into(),
-            port: 6454,
-            universe: 0,
-            channels: vec![0; 512],
+impl ArtNetBuffers {
+    pub fn write(&mut self, pointer: ArtNetDataPointer, value: u8) -> Result<(), String> {
+        if !self.buffers.contains_key(&pointer.address) {
+            self.buffers
+                .insert(pointer.address, Dmx512Buffer::default());
         }
+        let buffer = self.buffers.get_mut(&pointer.address).unwrap();
+        buffer.write(pointer.offset as usize, value)?;
+        self.dirty.insert(pointer.address);
+        Ok(())
+    }
+
+    pub fn iter_dirty(&self) -> impl Iterator<Item = (ArtNetAddress, &Dmx512Buffer)> {
+        self.dirty
+            .iter()
+            .filter_map(|address| self.buffers.get(address).map(|buffer| (*address, buffer)))
+    }
+
+    pub fn clear_all(&mut self) {
+        for buffer in self.buffers.values_mut() {
+            buffer.clear();
+        }
+        self.dirty.clear();
     }
 }
 
-pub fn send_and_erase_buffers(
-    mut connections: ResMut<ArtNetConnections>,
-    socket: Res<ActiveSocket>,
-) {
+pub fn send_and_clear_buffers(mut buffers: ResMut<ArtNetBuffers>, socket: Res<ActiveSocket>) {
     let Some(socket) = &socket.socket else {
         return;
     };
 
-    for connection in &connections.connections {
-        let command = artnet_protocol::ArtCommand::Output(connection.into());
-        let bytes = command.write_to_buffer().unwrap();
-        // TODO: re-add this back once it doesn't cause lag spikes...
-        // socket.send_to(&bytes, connection.socket_addr).unwrap();
+    for (address, buffer) in buffers.iter_dirty() {
+        let port_address: PortAddress =
+            ((address.net as u16) << 8 | (address.subnet as u16) << 4 | (address.universe as u16))
+                .try_into()
+                .expect("validated ArtNetAddress always produces a valid PortAddress");
+        let command = ArtCommand::Output(Output {
+            port_address,
+            data: buffer.bytes[..buffer.length].to_vec().into(),
+            ..Output::default()
+        });
+        match command.write_to_buffer() {
+            Ok(packet) => {
+                if let Err(e) = socket.send_to(&packet, "255.255.255.255:6454") {
+                    warn!("Failed to send Art-Net packet to {:?}: {}", address, e);
+                }
+            }
+            Err(e) => warn!(
+                "Failed to serialize Art-Net packet for {:?}: {}",
+                address, e
+            ),
+        }
     }
 
-    connections.connections = Vec::new();
+    buffers.clear_all();
 }

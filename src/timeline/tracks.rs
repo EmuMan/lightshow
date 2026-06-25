@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::{
     simple_store::SimpleHandle,
     timeline::{effects::EffectInfo, keyframes::Keyframes, sequences::Sequence},
-    util::blending::colors::ColorBlendingMode,
+    util::blending::BlendingMode,
 };
 
 /// Represents a single track on the timeline. Each track contains generic
@@ -19,11 +19,11 @@ pub struct Track {
     pub contents: TrackContents,
 }
 
-/// Holds generic information about a track. Currently contains color blending
-/// mode, factor, and keyframes that modify any supported track values..
+/// Holds generic information about a track. Currently contains blending
+/// mode, factor, and keyframes that modify any supported track values.
 #[derive(Debug)]
 pub struct TrackInfo {
-    pub color_blending_mode: ColorBlendingMode,
+    pub blending_mode: BlendingMode,
     pub factor: f32,
     pub track_keyframes: Keyframes,
 }

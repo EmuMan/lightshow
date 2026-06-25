@@ -1,5 +1,18 @@
 pub mod colors;
-pub mod vec3;
+pub mod pan_tilt;
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum BlendingMode {
+    #[default]
+    Add,
+    Mix,
+    Subtract,
+    Multiply,
+}
+
+fn lerp(f1: f32, f2: f32, t: f32) -> f32 {
+    f1 + (f2 - f1) * t
+}
 
 // Thank you ChatGPT for the following mess I did not want to deal with
 
